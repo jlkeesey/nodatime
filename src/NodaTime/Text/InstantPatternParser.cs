@@ -2,14 +2,11 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
-using System.Globalization;
-using System.Text;
+using JetBrains.Annotations;
 using NodaTime.Globalization;
-using NodaTime.Properties;
 using NodaTime.Text.Patterns;
 using NodaTime.Utility;
-using JetBrains.Annotations;
+using System.Text;
 
 namespace NodaTime.Text
 {
@@ -28,23 +25,21 @@ namespace NodaTime.Text
         internal const string BeforeMinValueText = "StartOfTime";
         internal const string AfterMaxValueText = "EndOfTime";
 
-        public IPattern<Instant> ParsePattern([NotNull] string patternText, NodaFormatInfo formatInfo)
+        public IPattern<Instant> ParsePattern(string patternText, NodaFormatInfo formatInfo)
         {
             Preconditions.CheckNotNull(patternText, nameof(patternText));
             if (patternText.Length == 0)
             {
-                throw new InvalidPatternException(Messages.Parse_FormatStringEmpty);
+                throw new InvalidPatternException(TextErrorMessages.FormatStringEmpty);
             }
             if (patternText.Length == 1)
             {
-                switch (patternText)
+                patternText = patternText[0] switch
                 {
-                    case "g": // Simplest way of handling the general pattern...
-                        patternText = GeneralPatternText;
-                        break;
-                    default:
-                        throw new InvalidPatternException(Messages.Parse_UnknownStandardFormat, patternText, typeof(Instant));
-                }
+                    // Simplest way of handling the general pattern...
+                    'g' => GeneralPatternText,
+                    _ => throw new InvalidPatternException(TextErrorMessages.UnknownStandardFormat, patternText, typeof(Instant))
+                };
             }
 
             IPattern<LocalDateTime> localResult = formatInfo.LocalDateTimePatternParser.ParsePattern(patternText);
@@ -68,7 +63,7 @@ namespace NodaTime.Text
                     : value == Instant.BeforeMinValue ? BeforeMinValueText
                     : AfterMaxValueText;
 
-            public StringBuilder AppendFormat(Instant value, [NotNull] StringBuilder builder) =>
+            public StringBuilder AppendFormat(Instant value, StringBuilder builder) =>
                 pattern.AppendFormat(value.InUtc().LocalDateTime, builder);
 
             public ParseResult<Instant> Parse(string text) =>

@@ -37,7 +37,7 @@ namespace NodaTime.TimeZones.IO
             /// <summary>The marker value representing an instant as a fixed 64-bit number of ticks.</summary>
             internal const int MarkerRaw = 2;
             /// <summary>The minimum varint value that represents an number of hours-since-previous.</summary>
-            /// <remarks>Values below value are reserved for markers.</remarks>
+            /// <remarks>Values below this are reserved for markers.</remarks>
             internal const int MinValueForHoursSincePrevious = 1 << 7;
             /// <summary>The minimum varint value that represents an number of minutes since an epoch.</summary>
             /// <remarks>Values below this are interpreted as hours-since-previous (for a range of about 240 years),
@@ -48,14 +48,14 @@ namespace NodaTime.TimeZones.IO
         }
 
         private readonly Stream output;
-        private readonly IList<string> stringPool; 
+        private readonly IList<string>? stringPool; 
 
         /// <summary>
         /// Constructs a DateTimeZoneWriter.
         /// </summary>
         /// <param name="output">Where to send the serialized output.</param>
         /// <param name="stringPool">String pool to add strings to, or null for no pool</param>
-        internal DateTimeZoneWriter(Stream output, IList<string> stringPool)
+        internal DateTimeZoneWriter(Stream output, IList<string>? stringPool)
         {
             this.output = output;
             this.stringPool = stringPool;
@@ -169,7 +169,7 @@ namespace NodaTime.TimeZones.IO
         /// Writes the given dictionary of string to string to the stream.
         /// </summary>
         /// <param name="dictionary">The <see cref="IDictionary{TKey,TValue}" /> to write.</param>
-        public void WriteDictionary([NotNull] IDictionary<string, string> dictionary)
+        public void WriteDictionary(IDictionary<string, string> dictionary)
         {
             Preconditions.CheckNotNull(dictionary, nameof(dictionary));
             WriteCount(dictionary.Count);
@@ -253,7 +253,7 @@ namespace NodaTime.TimeZones.IO
         /// <param name="value">The value to write.</param>
         public void WriteString(string value)
         {
-            if (stringPool == null)
+            if (stringPool is null)
             {
                 byte[] data = Encoding.UTF8.GetBytes(value);
                 int length = data.Length;

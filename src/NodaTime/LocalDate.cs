@@ -2,21 +2,24 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
-using System.Globalization;
-using System.Runtime.Serialization;
-using System.Xml;
-using System.Xml.Schema;
-using System.Xml.Serialization;
 using JetBrains.Annotations;
 using NodaTime.Annotations;
 using NodaTime.Calendars;
 using NodaTime.Fields;
 using NodaTime.Text;
 using NodaTime.Utility;
+using System;
+using System.ComponentModel;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Xml;
+using System.Xml.Schema;
+using System.Xml.Serialization;
 
 namespace NodaTime
 {
+    // TODO(feature): Calendar-neutral comparer.
+
     /// <summary>
     /// LocalDate is an immutable struct representing a date within the calendar,
     /// with no reference to a particular time zone or time of day.
@@ -27,19 +30,23 @@ namespace NodaTime
     /// a value in a different calendar system. However, ordering comparisons (either via the <see cref="CompareTo"/> method
     /// or via operators) fail with <see cref="ArgumentException"/>; attempting to compare values in different calendars
     /// almost always indicates a bug in the calling code.
-    /// TODO(2.0): Calendar-neutral comparer.
     /// </para>
     /// </remarks>
     /// <threadsafety>This type is an immutable value type. See the thread safety section of the user guide for more information.</threadsafety>
-#if !PCL
-    [Serializable]
-#endif
-    public struct LocalDate : IEquatable<LocalDate>, IComparable<LocalDate>, IComparable, IFormattable, IXmlSerializable
-#if !PCL
-        , ISerializable
-#endif
+    [TypeConverter(typeof(LocalDateTypeConverter))]
+    public readonly struct LocalDate : IEquatable<LocalDate>, IComparable<LocalDate>, IComparable, IFormattable, IXmlSerializable
     {
-        [ReadWriteForEfficiency] private YearMonthDayCalendar yearMonthDayCalendar;
+        private readonly YearMonthDayCalendar yearMonthDayCalendar;
+
+        /// <summary>
+        /// The maximum (latest) date representable in the ISO calendar system.
+        /// </summary>
+        public static LocalDate MaxIsoValue => new LocalDate(new YearMonthDayCalendar(GregorianYearMonthDayCalculator.MaxGregorianYear, 12, 31, CalendarOrdinal.Iso));
+
+        /// <summary>
+        /// The minimum (earliest) date representable in the ISO calendar system.
+        /// </summary>
+        public static LocalDate MinIsoValue => new LocalDate(new YearMonthDayCalendar(GregorianYearMonthDayCalculator.MinGregorianYear, 1, 1, CalendarOrdinal.Iso));
 
         /// <summary>
         /// Constructs an instance from values which are assumed to already have been validated.
@@ -64,7 +71,7 @@ namespace NodaTime
         /// system. The calendar system is assumed to be non-null, but the days since the epoch are
         /// validated.
         /// </summary>
-        internal LocalDate(int daysSinceEpoch, [Trusted] [NotNull] CalendarSystem calendar)
+        internal LocalDate(int daysSinceEpoch, [Trusted] CalendarSystem calendar)
         {
             Preconditions.DebugCheckNotNull(calendar, nameof(calendar));
             this.yearMonthDayCalendar = calendar.GetYearMonthDayCalendarFromDaysSinceEpoch(daysSinceEpoch);
@@ -94,7 +101,7 @@ namespace NodaTime
         /// <param name="calendar">Calendar system in which to create the date.</param>
         /// <returns>The resulting date.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The parameters do not form a valid date.</exception>
-        public LocalDate(int year, int month, int day, [NotNull] CalendarSystem calendar)
+        public LocalDate(int year, int month, int day, CalendarSystem calendar)
         {
             Preconditions.CheckNotNull(calendar, nameof(calendar));
             calendar.ValidateYearMonthDay(year, month, day);
@@ -110,7 +117,7 @@ namespace NodaTime
         /// <param name="day">The day of month.</param>
         /// <returns>The resulting date.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The parameters do not form a valid date.</exception>
-        public LocalDate([NotNull] Era era, int yearOfEra, int month, int day)
+        public LocalDate(Era era, int yearOfEra, int month, int day)
             : this(era, yearOfEra, month, day, CalendarSystem.Iso)
         {
         }
@@ -125,14 +132,14 @@ namespace NodaTime
         /// <param name="calendar">Calendar system in which to create the date.</param>
         /// <returns>The resulting date.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The parameters do not form a valid date.</exception>
-        public LocalDate([NotNull] Era era, int yearOfEra, int month, int day, [NotNull] CalendarSystem calendar)
+        public LocalDate(Era era, int yearOfEra, int month, int day, CalendarSystem calendar)
             : this(Preconditions.CheckNotNull(calendar, nameof(calendar)).GetAbsoluteYear(yearOfEra, era), month, day, calendar)
         {
         }
 
         /// <summary>Gets the calendar system associated with this local date.</summary>
         /// <value>The calendar system associated with this local date.</value>
-        [NotNull] public CalendarSystem Calendar => CalendarSystem.ForOrdinal(yearMonthDayCalendar.CalendarOrdinal);
+        public CalendarSystem Calendar => CalendarSystem.ForOrdinal(yearMonthDayCalendar.CalendarOrdinal);
 
         /// <summary>Gets the year of this local date.</summary>
         /// <remarks>This returns the "absolute year", so, for the ISO calendar,
@@ -153,23 +160,10 @@ namespace NodaTime
         internal int DaysSinceEpoch => Calendar.GetDaysSinceEpoch(yearMonthDayCalendar.ToYearMonthDay());
 
         /// <summary>
-        /// Gets the week day of this local date expressed as an <see cref="NodaTime.IsoDayOfWeek"/> value,
-        /// for calendars which use ISO days of the week.
+        /// Gets the week day of this local date expressed as an <see cref="NodaTime.IsoDayOfWeek"/> value.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The underlying calendar doesn't use ISO days of the week.</exception>
-        /// <seealso cref="DayOfWeek"/>
         /// <value>The week day of this local date expressed as an <c>IsoDayOfWeek</c>.</value>
-        public IsoDayOfWeek IsoDayOfWeek => Calendar.GetIsoDayOfWeek(yearMonthDayCalendar.ToYearMonthDay());
-
-        /// <summary>
-        /// Gets the week day of this local date as a number.
-        /// </summary>
-        /// <remarks>
-        /// For calendars using ISO week days, this gives 1 for Monday to 7 for Sunday.
-        /// </remarks>
-        /// <seealso cref="IsoDayOfWeek"/>
-        /// <value>The week day of this local date as a number.</value>
-        public int DayOfWeek => Calendar.GetDayOfWeek(yearMonthDayCalendar.ToYearMonthDay());
+        public IsoDayOfWeek DayOfWeek => Calendar.GetDayOfWeek(yearMonthDayCalendar.ToYearMonthDay());
 
         /// <summary>Gets the year of this local date within the era.</summary>
         /// <value>The year of this local date within the era.</value>
@@ -211,6 +205,10 @@ namespace NodaTime
         public DateTime ToDateTimeUnspecified() =>
             new DateTime(DaysSinceEpoch * NodaConstants.TicksPerDay + NodaConstants.BclTicksAtUnixEpoch, DateTimeKind.Unspecified);
 
+        // Helper method used by both FromDateTime overloads.
+        private static int NonNegativeTicksToDays(long ticks) =>
+            unchecked((int) ((ticks >> 14) / 52734375L));
+
         /// <summary>
         /// Converts a <see cref="DateTime" /> of any kind to a LocalDate in the ISO calendar, ignoring the time of day.
         /// This does not perform any time zone conversions, so a DateTime with a <see cref="DateTime.Kind"/> of
@@ -220,8 +218,7 @@ namespace NodaTime
         /// <returns>A new <see cref="LocalDate"/> with the same values as the specified <c>DateTime</c>.</returns>
         public static LocalDate FromDateTime(DateTime dateTime)
         {
-            long ticks = dateTime.Ticks - NodaConstants.BclTicksAtUnixEpoch;
-            int days = TickArithmetic.TicksToDays(ticks);
+            int days = NonNegativeTicksToDays(dateTime.Ticks) - NodaConstants.BclDaysAtUnixEpoch;
             return new LocalDate(days);
         }
 
@@ -233,10 +230,9 @@ namespace NodaTime
         /// <param name="dateTime">Value to convert into a Noda Time local date</param>
         /// <param name="calendar">The calendar system to convert into</param>
         /// <returns>A new <see cref="LocalDate"/> with the same values as the specified <c>DateTime</c>.</returns>
-        public static LocalDate FromDateTime(DateTime dateTime, [NotNull] CalendarSystem calendar)
+        public static LocalDate FromDateTime(DateTime dateTime, CalendarSystem calendar)
         {
-            long ticks = dateTime.Ticks - NodaConstants.BclTicksAtUnixEpoch;
-            int days = TickArithmetic.TicksToDays(ticks);
+            int days = NonNegativeTicksToDays(dateTime.Ticks) - NodaConstants.BclDaysAtUnixEpoch;
             return new LocalDate(days, calendar);
         }
 
@@ -276,7 +272,7 @@ namespace NodaTime
             Preconditions.CheckArgumentRange(nameof(dayOfWeek), (int) dayOfWeek, 1, 7);
 
             // Correct day of week, 1st week of month.
-            int week1Day = (int) dayOfWeek - startOfMonth.DayOfWeek + 1;
+            int week1Day = dayOfWeek - startOfMonth.DayOfWeek + 1;
             if (week1Day <= 0)
             {
                 week1Day += 7;
@@ -291,11 +287,12 @@ namespace NodaTime
 
         /// <summary>
         /// Adds the specified period to the date.
+        /// Fields are added in descending order of significance (years first, then months, and so on).
         /// </summary>
         /// <param name="date">The date to add the period to</param>
         /// <param name="period">The period to add. Must not contain any (non-zero) time units.</param>
         /// <returns>The sum of the given date and period</returns>
-        public static LocalDate operator +(LocalDate date, [NotNull] Period period)
+        public static LocalDate operator +(LocalDate date, Period period)
         {
             Preconditions.CheckNotNull(period, nameof(period));
             Preconditions.CheckArgument(!period.HasTimeComponent, nameof(period), "Cannot add a period with a time component to a date");
@@ -303,20 +300,24 @@ namespace NodaTime
         }
 
         /// <summary>
-        /// Adds the specified period to the date. Friendly alternative to <c>operator+()</c>.
+        /// Adds the specified period to the date.
+        /// Fields are added in descending order of significance (years first, then months, and so on).
+        /// Friendly alternative to <c>operator+()</c>.
         /// </summary>
         /// <param name="date">The date to add the period to</param>
         /// <param name="period">The period to add. Must not contain any (non-zero) time units.</param>
         /// <returns>The sum of the given date and period</returns>
-        public static LocalDate Add(LocalDate date, [NotNull] Period period) => date + period;
+        public static LocalDate Add(LocalDate date, Period period) => date + period;
 
         /// <summary>
-        /// Adds the specified period to this date. Fluent alternative to <c>operator+()</c>.
+        /// Adds the specified period to this date.
+        /// Fields are added in descending order of significance (years first, then months, and so on).
+        /// Fluent alternative to <c>operator+()</c>.
         /// </summary>
         /// <param name="period">The period to add. Must not contain any (non-zero) time units.</param>
         /// <returns>The sum of this date and the given period</returns>
         [Pure]
-        public LocalDate Plus([NotNull] Period period) => this + period;
+        public LocalDate Plus(Period period) => this + period;
 
         /// <summary>
         /// Combines the given <see cref="LocalDate"/> and <see cref="LocalTime"/> components
@@ -329,12 +330,13 @@ namespace NodaTime
 
         /// <summary>
         /// Subtracts the specified period from the date.
+        /// Fields are subtracted in descending order of significance (years first, then months, and so on).
         /// This is a convenience operator over the <see cref="Minus(Period)"/> method.
         /// </summary>
         /// <param name="date">The date to subtract the period from</param>
         /// <param name="period">The period to subtract. Must not contain any (non-zero) time units.</param>
         /// <returns>The result of subtracting the given period from the date</returns>
-        public static LocalDate operator -(LocalDate date, [NotNull] Period period)
+        public static LocalDate operator -(LocalDate date, Period period)
         {
             Preconditions.CheckNotNull(period, nameof(period));
             Preconditions.CheckArgument(!period.HasTimeComponent, nameof(period), "Cannot subtract a period with a time component from a date");
@@ -342,31 +344,38 @@ namespace NodaTime
         }
 
         /// <summary>
-        /// Subtracts the specified period from the date. Friendly alternative to <c>operator-()</c>.
+        /// Subtracts the specified period from the date.
+        /// Fields are subtracted in descending order of significance (years first, then months, and so on).
+        /// Friendly alternative to <c>operator-()</c>.
         /// </summary>
         /// <param name="date">The date to subtract the period from</param>
         /// <param name="period">The period to subtract. Must not contain any (non-zero) time units.</param>
         /// <returns>The result of subtracting the given period from the date.</returns>
-        public static LocalDate Subtract(LocalDate date, [NotNull] Period period) => date - period;
+        public static LocalDate Subtract(LocalDate date, Period period) => date - period;
 
         /// <summary>
-        /// Subtracts the specified period from this date. Fluent alternative to <c>operator-()</c>.
+        /// Subtracts the specified period from this date.
+        /// Fields are subtracted in descending order of significance (years first, then months, and so on).
+        /// Fluent alternative to <c>operator-()</c>.
         /// </summary>
         /// <param name="period">The period to subtract. Must not contain any (non-zero) time units.</param>
         /// <returns>The result of subtracting the given period from this date.</returns>
         [Pure]
-        public LocalDate Minus([NotNull] Period period) => this - period;
+        public LocalDate Minus(Period period) => this - period;
 
         /// <summary>
         /// Subtracts one date from another, returning the result as a <see cref="Period"/> with units of years, months and days.
         /// </summary>
         /// <remarks>
         /// This is simply a convenience operator for calling <see cref="Period.Between(NodaTime.LocalDate,NodaTime.LocalDate)"/>.
-        /// The calendar systems of the two dates must be the same.
+        /// The calendar systems of the two dates must be the same; an exception will be thrown otherwise.
         /// </remarks>
         /// <param name="lhs">The date to subtract from</param>
         /// <param name="rhs">The date to subtract</param>
         /// <returns>The result of subtracting one date from another.</returns>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="lhs"/> and <paramref name="rhs"/> are not in the same calendar system.
+        /// </exception>
         public static Period operator -(LocalDate lhs, LocalDate rhs) => Period.Between(rhs, lhs);
 
         /// <summary>
@@ -388,8 +397,7 @@ namespace NodaTime
         /// <remarks>The specified date must be in the same calendar system as this.</remarks>
         /// <param name="date">The date to subtract from this</param>
         /// <returns>The difference between the specified date and this one</returns>
-        [Pure]
-        public Period Minus(LocalDate date) => this - date;
+        [Pure] public Period Minus(LocalDate date) => this - date;
 
         /// <summary>
         /// Compares two <see cref="LocalDate" /> values for equality. This requires
@@ -522,12 +530,38 @@ namespace NodaTime
         /// </returns>
         int IComparable.CompareTo(object obj)
         {
-            if (obj == null)
+            if (obj is null)
             {
                 return 1;
             }
             Preconditions.CheckArgument(obj is LocalDate, nameof(obj), "Object must be of type NodaTime.LocalDate.");
             return CompareTo((LocalDate)obj);
+        }
+
+        /// <summary>
+        /// Returns the later date of the given two.
+        /// </summary>
+        /// <param name="x">The first date to compare.</param>
+        /// <param name="y">The second date to compare.</param>
+        /// <exception cref="ArgumentException">The two dates have different calendar systems.</exception>
+        /// <returns>The later date of <paramref name="x"/> or <paramref name="y"/>.</returns>
+        public static LocalDate Max(LocalDate x, LocalDate y)
+        {
+            Preconditions.CheckArgument(x.Calendar.Equals(y.Calendar), nameof(y), "Only values with the same calendar system can be compared");
+            return x > y ? x : y;
+        }
+
+        /// <summary>
+        /// Returns the earlier date of the given two.
+        /// </summary>
+        /// <param name="x">The first date to compare.</param>
+        /// <param name="y">The second date to compare.</param>
+        /// <exception cref="ArgumentException">The two dates have different calendar systems.</exception>
+        /// <returns>The earlier date of <paramref name="x"/> or <paramref name="y"/>.</returns>
+        public static LocalDate Min(LocalDate x, LocalDate y)
+        {
+            Preconditions.CheckArgument(x.Calendar.Equals(y.Calendar), nameof(y), "Only values with the same calendar system can be compared");
+            return x < y ? x : y;
         }
 
         /// <summary>
@@ -542,7 +576,7 @@ namespace NodaTime
         /// </summary>
         /// <param name="obj">The object to compare this date with.</param>
         /// <returns>True if the given value is another local date equal to this one; false otherwise.</returns>
-        public override bool Equals(object obj) => obj is LocalDate && this == (LocalDate)obj;
+        public override bool Equals(object? obj) => obj is LocalDate other && this == other;
 
         /// <summary>
         /// Compares two <see cref="LocalDate"/> values for equality. This requires
@@ -564,7 +598,7 @@ namespace NodaTime
         /// (This is extremely rare.)</exception>
         /// <returns>The <see cref="ZonedDateTime"/> representing the earliest time on this date, in the given time zone.</returns>
         [Pure]
-        public ZonedDateTime AtStartOfDayInZone([NotNull] DateTimeZone zone)
+        public ZonedDateTime AtStartOfDayInZone(DateTimeZone zone)
         {
             Preconditions.CheckNotNull(zone, nameof(zone));
             return zone.AtStartOfDay(this);
@@ -578,7 +612,7 @@ namespace NodaTime
         /// <param name="calendar">The calendar system to convert this local date to.</param>
         /// <returns>The converted LocalDate</returns>
         [Pure]
-        public LocalDate WithCalendar([NotNull] CalendarSystem calendar)
+        public LocalDate WithCalendar(CalendarSystem calendar)
         {
             Preconditions.CheckNotNull(calendar, nameof(calendar));
             return new LocalDate(DaysSinceEpoch, calendar);
@@ -657,7 +691,7 @@ namespace NodaTime
                 throw new ArgumentOutOfRangeException(nameof(targetDayOfWeek));
             }
             // This will throw the desired exception for calendars with different week systems.
-            IsoDayOfWeek thisDay = IsoDayOfWeek;
+            IsoDayOfWeek thisDay = DayOfWeek;
             int difference = targetDayOfWeek - thisDay;
             if (difference <= 0)
             {
@@ -685,7 +719,7 @@ namespace NodaTime
                 throw new ArgumentOutOfRangeException(nameof(targetDayOfWeek));
             }
             // This will throw the desired exception for calendars with different week systems.
-            IsoDayOfWeek thisDay = IsoDayOfWeek;
+            IsoDayOfWeek thisDay = DayOfWeek;
             int difference = targetDayOfWeek - thisDay;
             if (difference >= 0)
             {
@@ -693,6 +727,15 @@ namespace NodaTime
             }
             return PlusDays(difference);
         }
+
+        /// <summary>
+        /// Returns an <see cref="OffsetDate"/> for this local date with the given offset.
+        /// </summary>
+        /// <remarks>This method is purely a convenient alternative to calling the <see cref="OffsetDate"/> constructor directly.</remarks>
+        /// <param name="offset">The offset to apply.</param>
+        /// <returns>The result of this date offset by the given amount.</returns>
+        [Pure]
+        public OffsetDate WithOffset(Offset offset) => new OffsetDate(this, offset);
 
         /// <summary>
         /// Combines this <see cref="LocalDate"/> with the given <see cref="LocalTime"/>
@@ -715,8 +758,38 @@ namespace NodaTime
         /// <param name="adjuster">The adjuster to apply.</param>
         /// <returns>The adjusted date.</returns>
         [Pure]
-        public LocalDate With([NotNull] Func<LocalDate, LocalDate> adjuster) =>
+        public LocalDate With(Func<LocalDate, LocalDate> adjuster) =>
             Preconditions.CheckNotNull(adjuster, nameof(adjuster)).Invoke(this);
+
+        /// <summary>
+        /// Deconstructs the current instance into its components.
+        /// </summary>
+        /// <param name="year">The year component of the date.</param>
+        /// <param name="month">The month component of the date.</param>
+        /// <param name="day">The day component of the date.</param>
+        [Pure]
+        public void Deconstruct(out int year, out int month, out int day)
+        {
+            year = Year;
+            month = Month;
+            day = Day;
+        }
+
+        /// <summary>
+        /// Deconstructs the current instance into its components.
+        /// </summary>
+        /// <param name="year">The year component of the date.</param>
+        /// <param name="month">The month component of the date.</param>
+        /// <param name="day">The day component of the date.</param>
+        /// <param name="calendar">The <see cref="CalendarSystem"/> associated with the date.</param>
+        [Pure]
+        public void Deconstruct(out int year, out int month, out int day, out CalendarSystem calendar)
+        {
+            year = Year;
+            month = Month;
+            day = Day;
+            calendar = Calendar;
+        }
 
         #region Formatting
         /// <summary>
@@ -741,19 +814,19 @@ namespace NodaTime
         /// or null to use the current thread's culture to obtain a format provider.
         /// </param>
         /// <filterpriority>2</filterpriority>
-        public string ToString(string patternText, IFormatProvider formatProvider) =>
+        public string ToString(string? patternText, IFormatProvider? formatProvider) =>
             LocalDatePattern.BclSupport.Format(this, patternText, formatProvider);
         #endregion Formatting
 
         #region XML serialization
         /// <inheritdoc />
-        XmlSchema IXmlSerializable.GetSchema() => null;
+        XmlSchema IXmlSerializable.GetSchema() => null!; // TODO(nullable): Return XmlSchema? when docfx works with that
 
         /// <inheritdoc />
-        void IXmlSerializable.ReadXml([NotNull] XmlReader reader)
+        void IXmlSerializable.ReadXml(XmlReader reader)
         {
             Preconditions.CheckNotNull(reader, nameof(reader));
-            var pattern = LocalDatePattern.IsoPattern;
+            var pattern = LocalDatePattern.Iso;
             if (reader.MoveToAttribute("calendar"))
             {
                 string newCalendarId = reader.Value;
@@ -763,49 +836,19 @@ namespace NodaTime
                 reader.MoveToElement();
             }
             string text = reader.ReadElementContentAsString();
-            this = pattern.Parse(text).Value;
+            Unsafe.AsRef(this) = pattern.Parse(text).Value;
         }
 
         /// <inheritdoc />
-        void IXmlSerializable.WriteXml([NotNull] XmlWriter writer)
+        void IXmlSerializable.WriteXml(XmlWriter writer)
         {
             Preconditions.CheckNotNull(writer, nameof(writer));
             if (Calendar != CalendarSystem.Iso)
             {
                 writer.WriteAttributeString("calendar", Calendar.Id);
             }
-            writer.WriteString(LocalDatePattern.IsoPattern.Format(this));
+            writer.WriteString(LocalDatePattern.Iso.Format(this));
         }
         #endregion
-
-#if !PCL
-        #region Binary serialization
-        private const string YearMonthDayCalendarSerializationName = "yearMonthDayCalendar";
-
-        /// <summary>
-        /// Private constructor only present for serialization.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to fetch data from.</param>
-        /// <param name="context">The source for this deserialization.</param>
-        private LocalDate([NotNull] SerializationInfo info, StreamingContext context)
-            : this(new YearMonthDayCalendar(Preconditions.CheckNotNull(info, nameof(info)).GetInt32(YearMonthDayCalendarSerializationName)))
-        {
-            // TODO(2.0): Validation!
-        }
-
-        /// <summary>
-        /// Implementation of <see cref="ISerializable.GetObjectData"/>.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to populate with data.</param>
-        /// <param name="context">The destination for this serialization.</param>
-        [System.Security.SecurityCritical]
-        void ISerializable.GetObjectData([NotNull] SerializationInfo info, StreamingContext context)
-        {
-            Preconditions.CheckNotNull(info, nameof(info));
-            // TODO(2.0): Consider deserialization of 1.x, and consider serializing year, month, day and calendar separately.
-            info.AddValue(YearMonthDayCalendarSerializationName, yearMonthDayCalendar.RawValue);
-        }
-        #endregion
-#endif
     }
 }

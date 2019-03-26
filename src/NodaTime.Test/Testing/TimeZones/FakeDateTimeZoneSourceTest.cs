@@ -5,6 +5,7 @@
 using System;
 using NodaTime.Testing.TimeZones;
 using NUnit.Framework;
+using System.Linq;
 
 namespace NodaTime.Test.Testing.TimeZones
 {
@@ -61,23 +62,19 @@ namespace NodaTime.Test.Testing.TimeZones
         [Test]
         public void ValidWindowsMapping()
         {
-#if PCL
-            string localId = TimeZoneInfo.Local.StandardName;
-#else
             string localId = TimeZoneInfo.Local.Id;
-#endif
             var source = new FakeDateTimeZoneSource.Builder
             {
                 BclIdsToZoneIds = { { localId, "x"} },
                 Zones = { CreateZone("x"), CreateZone("y") }
             }.Build();
-            Assert.AreEqual("x", source.MapTimeZoneId(TimeZoneInfo.Local));
+            Assert.AreEqual("x", source.GetSystemDefaultId());
         }
 
         [Test]
         public void NullZoneViaCollectionInitializer()
         {
-            Assert.Throws<ArgumentNullException>(() => new FakeDateTimeZoneSource.Builder { null });
+            Assert.Throws<ArgumentNullException>(() => new FakeDateTimeZoneSource.Builder { null! });
         }
 
         [Test]
@@ -85,7 +82,7 @@ namespace NodaTime.Test.Testing.TimeZones
         {
             var source = new FakeDateTimeZoneSource.Builder
             {
-                Zones = { null }
+                Zones = { null! }
             };
             AssertBuildFails(source);
         }
@@ -95,7 +92,7 @@ namespace NodaTime.Test.Testing.TimeZones
         {
             var source = new FakeDateTimeZoneSource.Builder
             {
-                BclIdsToZoneIds = { { "x", null } },
+                BclIdsToZoneIds = { { "x", null! } },
                 Zones = { CreateZone("z") }
             };
             AssertBuildFails(source);
@@ -112,19 +109,37 @@ namespace NodaTime.Test.Testing.TimeZones
             AssertBuildFails(source);
         }
 
+        [Test]
+        public void GetEnumerator()
+        {
+            var x = CreateZone("x");
+            var y = CreateZone("y");
+            var source = new FakeDateTimeZoneSource.Builder
+            {
+                Zones = { x, y }
+            };
+
+            // Tests IEnumerable<T>
+            CollectionAssert.AreEqual(new[] { x, y }, source.ToList());
+            // Tests IEnumerable
+            CollectionAssert.AreEqual(new[] { x, y }, source.OfType<DateTimeZone>().ToList());
+        }
+
         // We don't really care how it fails - just that an exception is thrown.
         // Unfortuntely NUnit requires the exact exception type :(
         private static void AssertBuildFails(FakeDateTimeZoneSource.Builder builder)
         {
+            bool success = false;
             try
             {
                 builder.Build();
-                Assert.Fail("Expected exception");
+                success = true;
             }
             catch (Exception)
             {
                 // Expected
             }
+            Assert.IsFalse(success);
         }
     }
 }

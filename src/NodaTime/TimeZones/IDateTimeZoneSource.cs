@@ -63,7 +63,7 @@ namespace NodaTime.TimeZones
         /// The included sources return strings of the format "source identifier: source version" indicating where the
         /// information comes from and which version of the source information has been loaded.
         /// </remarks>
-        /// <value>An appropriate version ID for diagnostic purposes, which must not be null.</value>
+        /// <value>An appropriate version ID for diagnostic purposes.</value>
         string VersionId { get; }
 
         /// <summary>
@@ -93,16 +93,15 @@ namespace NodaTime.TimeZones
         /// returned by <see cref="GetIds"/>.</param>
         /// <returns>The <see cref="DateTimeZone"/> for the given ID.</returns>
         /// <exception cref="ArgumentException"><paramref name="id"/> is not supported by this source.</exception>
-        DateTimeZone ForId([NotNull] string id);
+        DateTimeZone ForId(string id);
 
         /// <summary>
-        /// Returns this source's corresponding ID for the given BCL time zone.
+        /// Returns this source's ID for the system default time zone.
         /// </summary>
-        /// <param name="timeZone">The BCL time zone, which must be a known system time zone.</param>
         /// <returns>
-        /// The ID for the given system time zone for this source, or null if the system time
-        /// zone has no mapping in this source.
+        /// The ID for the system default time zone for this source,
+        /// or null if the system default time zone has no mapping in this source.
         /// </returns>
-        string MapTimeZoneId([NotNull] TimeZoneInfo timeZone);
+        string? GetSystemDefaultId();
     }
 }

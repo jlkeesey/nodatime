@@ -65,18 +65,6 @@ namespace NodaTime.Calendars
             this.leapYearPatternBits = GetLeapYearPatternBits(leapYearPattern);
         }
 
-        internal override YearMonthDay SetYear(YearMonthDay yearMonthDay, int year)
-        {
-            int month = yearMonthDay.Month;
-            int day = yearMonthDay.Day;
-            // The only value which might change day is the last day of a leap year
-            if (month == 12 && day == 30 && !IsLeapYear(year))
-            {
-                day = 29;
-            }
-            return new YearMonthDay(year, month, day);
-        }
-
         protected override int GetDaysFromStartOfYearToStartOfMonth(int year, int month)
         {
             // The number of days at the *start* of a month isn't affected by
@@ -152,31 +140,25 @@ namespace NodaTime.Calendars
         /// Note that although cycle years are usually numbered 1-30, the bit pattern is for 0-29; cycle year
         /// 30 is represented by bit 0.
         /// </summary>
-        private static int GetLeapYearPatternBits(IslamicLeapYearPattern leapYearPattern)
-        {
-            switch (leapYearPattern)
+        private static int GetLeapYearPatternBits(IslamicLeapYearPattern leapYearPattern) => leapYearPattern switch
             {
                 // When reading bit patterns, don't forget to read right to left...
-                case IslamicLeapYearPattern.Base15:        return 623158436; // 0b100101001001001010010010100100
-                case IslamicLeapYearPattern.Base16:        return 623191204; // 0b100101001001010010010010100100
-                case IslamicLeapYearPattern.Indian:        return 690562340; // 0b101001001010010010010100100100
-                case IslamicLeapYearPattern.HabashAlHasib: return 153692453; // 0b001001001010010010100100100101
-                default: throw new ArgumentOutOfRangeException(nameof(leapYearPattern));
-            }
-        }
+                IslamicLeapYearPattern.Base15 => 623158436,        // 0b100101001001001010010010100100
+                IslamicLeapYearPattern.Base16 => 623191204,        // 0b100101001001010010010010100100
+                IslamicLeapYearPattern.Indian => 690562340,        // 0b101001001010010010010100100100
+                IslamicLeapYearPattern.HabashAlHasib => 153692453, // 0b001001001010010010100100100101
+                _ => throw new ArgumentOutOfRangeException(nameof(leapYearPattern))
+            };
 
         /// <summary>
         /// Returns the days since the Unix epoch at the specified epoch.
         /// </summary>
-        private static int GetYear1Days(IslamicEpoch epoch)
-        {
-            switch (epoch)
+        private static int GetYear1Days(IslamicEpoch epoch) => epoch switch
             {
                 // Epoch 1970-01-01 ISO = 1389-10-22 Islamic (civil) or 1389-10-23 Islamic (astronomical)
-                case IslamicEpoch.Astronomical: return DaysAtAstronomicalEpoch;
-                case IslamicEpoch.Civil:        return DaysAtCivilEpoch;
-                default: throw new ArgumentOutOfRangeException(nameof(epoch));
-            }
-        }
+                IslamicEpoch.Astronomical => DaysAtAstronomicalEpoch,
+                IslamicEpoch.Civil => DaysAtCivilEpoch,
+                _ => throw new ArgumentOutOfRangeException(nameof(epoch))
+            };
     }
 }

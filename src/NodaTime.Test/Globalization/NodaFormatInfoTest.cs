@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Threading;
 using NodaTime.Calendars;
 using NodaTime.Globalization;
 using NodaTime.Test.Text;
@@ -15,18 +14,8 @@ namespace NodaTime.Test.Globalization
 {
     public class NodaFormatInfoTest
     {
-        private static readonly CultureInfo enUs = Cultures.GetCultureInfo("en-US");
-        private static readonly CultureInfo enGb = Cultures.GetCultureInfo("en-GB");
-
-        private sealed class EmptyFormatProvider : IFormatProvider
-        {
-            #region IFormatProvider Members
-            public object GetFormat(Type formatType)
-            {
-                return null;
-            }
-            #endregion
-        }
+        private static readonly CultureInfo enUs = CultureInfo.GetCultureInfo("en-US");
+        private static readonly CultureInfo enGb = CultureInfo.GetCultureInfo("en-GB");
 
         // Just check we can actually build a NodaFormatInfo for every culture, outside
         // text-specific tests.
@@ -88,7 +77,7 @@ namespace NodaTime.Test.Globalization
         [Test]
         public void TestConstructor_null()
         {
-            Assert.Throws<ArgumentNullException>(() => new NodaFormatInfo(null));
+            Assert.Throws<ArgumentNullException>(() => new NodaFormatInfo(null!));
         }
 
         [Test]
@@ -117,7 +106,7 @@ namespace NodaTime.Test.Globalization
         public void TestGetFormatInfo_null()
         {
             NodaFormatInfo.ClearCache();
-            Assert.Throws<ArgumentNullException>(() => NodaFormatInfo.GetFormatInfo(null));
+            Assert.Throws<ArgumentNullException>(() => NodaFormatInfo.GetFormatInfo(null!));
         }
 
         [Test]
@@ -132,14 +121,21 @@ namespace NodaTime.Test.Globalization
         }
 
         [Test]
-        public void TestGetInstance_IFormatProvider()
+        public void TestGetInstance_UnusableType()
+        {
+            NodaFormatInfo.ClearCache();
+            Assert.Throws<ArgumentException>(() => NodaFormatInfo.GetInstance(CultureInfo.InvariantCulture.NumberFormat));
+        }
+
+        [Test]
+        public void TestGetInstance_DateTimeFormatInfo()
         {
             NodaFormatInfo.ClearCache();
             using (CultureSaver.SetCultures(enUs, FailingCultureInfo.Instance))
             {
-                var provider = new EmptyFormatProvider();
-                var actual = NodaFormatInfo.GetInstance(provider);
-                Assert.AreSame(enUs, actual.CultureInfo);
+                var info = NodaFormatInfo.GetInstance(enGb.DateTimeFormat);
+                Assert.AreEqual(enGb.DateTimeFormat, info.DateTimeFormat);
+                Assert.AreEqual(CultureInfo.InvariantCulture, info.CultureInfo);
             }
         }
 
@@ -202,7 +198,7 @@ namespace NodaTime.Test.Globalization
         public void TestEraGetNames_Null()
         {
             var info = NodaFormatInfo.GetFormatInfo(enUs);
-            Assert.Throws<ArgumentNullException>(() => info.GetEraNames(null));
+            Assert.Throws<ArgumentNullException>(() => info.GetEraNames(null!));
         }
 
         [Test]
@@ -223,7 +219,19 @@ namespace NodaTime.Test.Globalization
         public void TestEraGetEraPrimaryName_Null()
         {
             var info = NodaFormatInfo.GetFormatInfo(enUs);
-            Assert.Throws<ArgumentNullException>(() => info.GetEraPrimaryName(null));
+            Assert.Throws<ArgumentNullException>(() => info.GetEraPrimaryName(null!));
+        }
+
+        [Test]
+        public void TestIntegerGenitiveMonthNames()
+        {
+            // Emulate behavior of Mono 3.0.6
+            var culture = (CultureInfo) CultureInfo.InvariantCulture.Clone();
+            culture.DateTimeFormat.MonthGenitiveNames = new[] { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" };
+            culture.DateTimeFormat.AbbreviatedMonthGenitiveNames = new[] { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" };
+            var info = NodaFormatInfo.GetFormatInfo(culture);
+            CollectionAssert.AreEqual(info.LongMonthGenitiveNames, info.LongMonthNames);
+            CollectionAssert.AreEqual(info.ShortMonthGenitiveNames, info.ShortMonthNames);
         }
     }
 }

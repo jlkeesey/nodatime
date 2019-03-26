@@ -12,7 +12,7 @@ namespace NodaTime.TimeZones
     /// </summary>
     /// 
     /// <threadsafety>This type is an immutable value type. See the thread safety section of the user guide for more information.</threadsafety>
-    internal struct Transition : IEquatable<Transition>
+    internal readonly struct Transition : IEquatable<Transition>
     {
         internal Instant Instant { get; }
 
@@ -56,7 +56,7 @@ namespace NodaTime.TimeZones
         /// <c>true</c> if the specified <see cref="System.Object"/> is equal to this instance;
         /// otherwise, <c>false</c>.
         /// </returns>
-        public override bool Equals(object obj) => obj is Transition && Equals((Transition)obj);
+        public override bool Equals(object? obj) => obj is Transition other && Equals(other);
 
         /// <summary>
         /// Returns a hash code for this instance.
@@ -67,10 +67,13 @@ namespace NodaTime.TimeZones
         /// </returns>
         public override int GetHashCode()
         {
-            int hash = 23;
-            hash = hash * 31 + Instant.GetHashCode();
-            hash = hash * 31 + NewOffset.GetHashCode();
-            return hash;
+            unchecked
+            {
+                int hash = 23;
+                hash = hash * 31 + Instant.GetHashCode();
+                hash = hash * 31 + NewOffset.GetHashCode();
+                return hash;
+            }
         }
 
         /// <summary>

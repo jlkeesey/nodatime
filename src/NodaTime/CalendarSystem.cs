@@ -10,6 +10,7 @@ using JetBrains.Annotations;
 using NodaTime.Annotations;
 using NodaTime.Calendars;
 using NodaTime.Utility;
+using System.Diagnostics.CodeAnalysis;
 
 namespace NodaTime
 {
@@ -51,6 +52,9 @@ namespace NodaTime
 
         private const string CopticName = "Coptic";
         private const string CopticId = CopticName;
+
+        private const string BadiName = "Badi";
+        private const string BadiId = BadiName;
 
         private const string JulianName = "Julian";
         private const string JulianId = JulianName;
@@ -101,8 +105,8 @@ namespace NodaTime
         /// <exception cref="NotSupportedException">The calendar system with the specified ID is known, but not supported on this platform.</exception>
         public static CalendarSystem ForId(string id)
         {
-            Func<CalendarSystem> factory;
-            if (!IdToFactoryMap.TryGetValue(id, out factory))
+            Preconditions.CheckNotNull(id, nameof(id));
+            if (!IdToFactoryMap.TryGetValue(id, out Func<CalendarSystem> factory))
             {
                 throw new KeyNotFoundException($"No calendar system for ID {id} exists");
             }
@@ -110,11 +114,9 @@ namespace NodaTime
         }
 
         /// <summary>
-        /// Fetches a calendar system by its ordinal value. This currently assumes that the relevant <see cref="CalendarSystem" /> will have been
-        /// initialized beforehand (as construction populates the array). In other words, this should not be called with an arbitrary ordinal;
-        /// this is fine as it's usually called for an existing local date, which must have been initialized using a known calendar system.
+        /// Fetches a calendar system by its ordinal value, constructing it if necessary.
         /// </summary>
-        [NotNull] internal static CalendarSystem ForOrdinal([Trusted] CalendarOrdinal ordinal)
+        internal static CalendarSystem ForOrdinal([Trusted] CalendarOrdinal ordinal)
         {
             Preconditions.DebugCheckArgument(ordinal >= 0 && ordinal < CalendarOrdinal.Size, nameof(ordinal),
                 "Unknown ordinal value {0}", ordinal);
@@ -130,47 +132,12 @@ namespace NodaTime
             }
             // Not found it in the array. This can happen if the calendar system was initialized in
             // a different thread, and the write to the array isn't visible in this thread yet.
-            // A simple switch will do the right thing.
-            switch (ordinal)
-            {
-                case CalendarOrdinal.Gregorian:
-                    return Gregorian;
-                case CalendarOrdinal.Julian:
-                    return Julian;
-                case CalendarOrdinal.Coptic:
-                    return Coptic;
-                case CalendarOrdinal.HebrewCivil:
-                    return HebrewCivil;
-                case CalendarOrdinal.HebrewScriptural:
-                    return HebrewScriptural;
-                case CalendarOrdinal.PersianSimple:
-                    return PersianSimple;
-                case CalendarOrdinal.PersianArithmetic:
-                    return PersianArithmetic;
-                case CalendarOrdinal.PersianAstronomical:
-                    return PersianAstronomical;
-                case CalendarOrdinal.IslamicAstronomicalBase15:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Base15, IslamicEpoch.Astronomical);
-                case CalendarOrdinal.IslamicAstronomicalBase16:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Base16, IslamicEpoch.Astronomical);
-                case CalendarOrdinal.IslamicAstronomicalIndian:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Indian, IslamicEpoch.Astronomical);
-                case CalendarOrdinal.IslamicAstronomicalHabashAlHasib:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.HabashAlHasib, IslamicEpoch.Astronomical);
-                case CalendarOrdinal.IslamicCivilBase15:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Base15, IslamicEpoch.Civil);
-                case CalendarOrdinal.IslamicCivilBase16:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Base16, IslamicEpoch.Civil);
-                case CalendarOrdinal.IslamicCivilIndian:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.Indian, IslamicEpoch.Civil);
-                case CalendarOrdinal.IslamicCivilHabashAlHasib:
-                    return GetIslamicCalendar(IslamicLeapYearPattern.HabashAlHasib, IslamicEpoch.Civil);
-                case CalendarOrdinal.UmAlQura:
-                    return UmAlQura;
-                default:
-                    throw new InvalidOperationException($"Bug in Noda Time: calendar ordinal {ordinal} missing from switch in CalendarSystem.ForOrdinal.");
-            }
-    }
+            // A simple switch will do the right thing. This is separated out (directly below) to allow
+            // it to be tested separately. (It may also help this method be inlined...) The return
+            // statement below is unlikely to ever be hit by code coverage, as it's handling a very
+            // unusual and hard-to-provoke situation.
+            return ForOrdinalUncached(ordinal);
+        }
 
         /// <summary>
         /// Returns the IDs of all calendar systems available within Noda Time. The order of the keys is not guaranteed.
@@ -188,6 +155,7 @@ namespace NodaTime
             {HebrewScripturalId, () => GetHebrewCalendar(HebrewMonthNumbering.Scriptural)},
             {GregorianId, () => Gregorian},
             {CopticId, () => Coptic},
+            {BadiId, () => Badi},
             {JulianId, () => Julian},
             {UmAlQuraId, () => UmAlQura},
             {GetIslamicId(IslamicLeapYearPattern.Indian, IslamicEpoch.Civil), () => GetIslamicCalendar(IslamicLeapYearPattern.Indian, IslamicEpoch.Civil)},
@@ -235,7 +203,27 @@ namespace NodaTime
             Preconditions.CheckArgumentRange(nameof(monthNumbering), (int) monthNumbering, 1, 2);
             return HebrewCalendars.ByMonthNumbering[((int) monthNumbering) - 1];
         }
-        
+
+        /// <summary>
+        /// Returns the Badíʿ (meaning "wondrous" or "unique") calendar, as described at https://en.wikipedia.org/wiki/Badi_calendar. 
+        /// This is a purely solar calendar with years starting at the vernal equinox.
+        /// </summary>
+        /// <remarks>
+        /// <para>The Badíʿ calendar was developed and defined by the founders of the Bahá'í Faith in the mid to late
+        /// 1800's A.D. The first year in the calendar coincides with 1844 A.D. Years are labeled "B.E." for Bahá'í Era.</para>
+        /// <para>A year consists of 19 months, each with 19 days. Each day starts at sunset. Years are grouped into sets
+        /// of 19 "Unities" (Váḥid) and 19 Unities make up 1 "All Things" (Kull-i-Shay’).</para>
+        /// <para>A period of days (usually 4 or 5, called Ayyám-i-Há) occurs between the 18th and 19th months. The length of this 
+        /// period of intercalary days is solely determined by the date of the following vernal equinox. The vernal equinox is 
+        /// a momentary point in time, so the "date" of the equinox is determined by the date (beginning 
+        /// at sunset) in effect in Tehran, Iran at the moment of the equinox.</para>
+        /// <para>In this Noda Time implementation, days start at midnight and lookup tables are used to determine vernal equinox dates.
+        /// Ayyám-i-Há is internally modelled as extra days added to the 18th month. As a result, a few functions will
+        /// not work as expected for Ayyám-i-Há, such as EndOfMonth.</para>
+        /// </remarks>
+        /// <returns>The Badíʿ calendar system.</returns>
+        public static CalendarSystem Badi => MiscellaneousCalendars.Badi;
+
         /// <summary>
         /// Returns an Islamic, or Hijri, calendar system.
         /// </summary>
@@ -344,6 +332,7 @@ namespace NodaTime
         ///   <item><term>ISO</term><description><see cref="CalendarSystem.Iso"/></description></item>
         ///   <item><term>Gregorian</term><description><see cref="CalendarSystem.Gregorian"/></description></item>
         ///   <item><term>Coptic</term><description><see cref="CalendarSystem.Coptic"/></description></item>
+        ///   <item><term>Badíʿ</term><description><see cref="CalendarSystem.Badi"/></description></item>
         ///   <item><term>Julian</term><description><see cref="CalendarSystem.Julian"/></description></item>
         ///   <item><term>Hijri Civil-Indian</term><description><see cref="CalendarSystem.GetIslamicCalendar"/>(IslamicLeapYearPattern.Indian, IslamicEpoch.Civil)</description></item>
         ///   <item><term>Hijri Civil-Base15</term><description><see cref="CalendarSystem.GetIslamicCalendar"/>(IslamicLeapYearPattern.Base15, IslamicEpoch.Civil)</description></item>
@@ -367,30 +356,10 @@ namespace NodaTime
         /// <summary>
         /// Returns the name of this calendar system. Each kind of calendar system has a unique name, but this
         /// does not usually provide enough information for round-tripping. (For example, the name of an
-        /// Islamic calendar system does not indicate which kind of leap cycle it uses, and other calendars
-        /// specify the minimum number of days in the first week of a year.)
+        /// Islamic calendar system does not indicate which kind of leap cycle it uses.)
         /// </summary>
         /// <value>The name of this calendar system.</value>
         public string Name { get; }
-
-        /// <summary>
-        /// Returns whether the day-of-week field refers to ISO days.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// If true, types such as <see cref="LocalDateTime" />
-        /// can use the <see cref="IsoDayOfWeek" /> property to avoid using magic numbers.
-        /// This defaults to true, but can be overridden by specific calendars.
-        /// </para>
-        /// <para>
-        /// Currently all calendar systems supported by Noda Time are deemed to use ISO
-        /// days, so every week is seven days long, and this property always returns true.
-        /// In the future, however, calendar systems with different - possibly even variable
-        /// - week lengths may be supported.
-        /// </para>
-        /// </remarks>
-        /// <value>true if the calendar system refers to ISO days; false otherwise.</value>
-        public bool UsesIsoDayOfWeek => true;
 
         /// <summary>
         /// Gets the minimum valid year (inclusive) within this calendar.
@@ -442,7 +411,7 @@ namespace NodaTime
         /// <returns>The absolute year represented by the specified year of era.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="yearOfEra"/> is out of the range of years for the given era.</exception>
         /// <exception cref="ArgumentException"><paramref name="era"/> is not an era used in this calendar.</exception>
-        public int GetAbsoluteYear(int yearOfEra, [NotNull] Era era) => eraCalculator.GetAbsoluteYear(yearOfEra, era);
+        public int GetAbsoluteYear(int yearOfEra, Era era) => eraCalculator.GetAbsoluteYear(yearOfEra, era);
 
         /// <summary>
         /// Returns the maximum valid year-of-era in the given era.
@@ -454,7 +423,7 @@ namespace NodaTime
         /// <param name="era">The era in which to find the greatest year</param>
         /// <returns>The maximum valid year in the given era.</returns>
         /// <exception cref="ArgumentException"><paramref name="era"/> is not an era used in this calendar.</exception>
-        public int GetMaxYearOfEra([NotNull] Era era) => eraCalculator.GetMaxYearOfEra(era);
+        public int GetMaxYearOfEra(Era era) => eraCalculator.GetMaxYearOfEra(era);
 
         /// <summary>
         /// Returns the minimum valid year-of-era in the given era.
@@ -466,12 +435,12 @@ namespace NodaTime
         /// <param name="era">The era in which to find the greatest year</param>
         /// <returns>The minimum valid year in the given eraera.</returns>
         /// <exception cref="ArgumentException"><paramref name="era"/> is not an era used in this calendar.</exception>
-        public int GetMinYearOfEra([NotNull] Era era) => eraCalculator.GetMinYearOfEra(era);
+        public int GetMinYearOfEra(Era era) => eraCalculator.GetMinYearOfEra(era);
 
         #endregion
 
         internal YearMonthDayCalculator YearMonthDayCalculator { get; }
-        
+
         internal YearMonthDayCalendar GetYearMonthDayCalendarFromDaysSinceEpoch(int daysSinceEpoch)
         {
             Preconditions.CheckArgumentRange(nameof(daysSinceEpoch), daysSinceEpoch, MinDays, MaxDays);
@@ -498,19 +467,17 @@ namespace NodaTime
         }
 
         /// <summary>
-        /// Returns the IsoDayOfWeek corresponding to the day of week for the given local instant
-        /// if this calendar uses ISO days of the week, or throws an InvalidOperationException otherwise.
+        /// Returns the IsoDayOfWeek corresponding to the day of week for the given year, month and day.
         /// </summary>
         /// <param name="yearMonthDay">The year, month and day to use to find the day of the week</param>
         /// <returns>The day of the week as an IsoDayOfWeek</returns>
-        internal IsoDayOfWeek GetIsoDayOfWeek([Trusted] YearMonthDay yearMonthDay)
+        internal IsoDayOfWeek GetDayOfWeek([Trusted] YearMonthDay yearMonthDay)
         {
             DebugValidateYearMonthDay(yearMonthDay);
-            if (!UsesIsoDayOfWeek)
-            {
-                throw new InvalidOperationException("Calendar " + Id + " does not use ISO days of the week");
-            }
-            return (IsoDayOfWeek) GetDayOfWeek(yearMonthDay);
+            int daysSinceEpoch = YearMonthDayCalculator.GetDaysSinceEpoch(yearMonthDay);
+            int numericDayOfWeek = unchecked(daysSinceEpoch >= -3 ? 1 + ((daysSinceEpoch + 3) % 7)
+                                           : 7 + ((daysSinceEpoch + 4) % 7));
+            return (IsoDayOfWeek) numericDayOfWeek;
         }
 
         /// <summary>
@@ -588,20 +555,12 @@ namespace NodaTime
 
         #region "Getter" methods which used to be DateTimeField
 
-        internal int GetDayOfWeek([Trusted] YearMonthDay yearMonthDay)
-        {
-            DebugValidateYearMonthDay(yearMonthDay);
-            int daysSinceEpoch = YearMonthDayCalculator.GetDaysSinceEpoch(yearMonthDay);
-            return unchecked(daysSinceEpoch >= -3 ? 1 + ((daysSinceEpoch + 3) % 7)
-                                           : 7 + ((daysSinceEpoch + 4) % 7));
-        }
-
         internal int GetDayOfYear([Trusted] YearMonthDay yearMonthDay)
         {
             DebugValidateYearMonthDay(yearMonthDay);
             return YearMonthDayCalculator.GetDayOfYear(yearMonthDay);
         }
-       
+
         internal int GetYearOfEra([Trusted] int absoluteYear)
         {
             Preconditions.DebugCheckArgumentRange(nameof(absoluteYear), absoluteYear, MinYear, MaxYear);
@@ -621,15 +580,19 @@ namespace NodaTime
         /// </summary>
         /// <param name="yearMonthDay">The value to validate.</param>
         [Conditional("DEBUG")]
+        [ExcludeFromCodeCoverage]
         internal void DebugValidateYearMonthDay(YearMonthDay yearMonthDay)
         {
+            // Avoid the line even being compiled in a release build...
+#if DEBUG
             ValidateYearMonthDay(yearMonthDay.Year, yearMonthDay.Month, yearMonthDay.Day);
+#endif
         }
 
         #endregion
 
         /// <summary>
-        /// Returns a Gregorian calendar system with at least 4 days in the first week of a week-year.
+        /// Returns a Gregorian calendar system.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -643,7 +606,7 @@ namespace NodaTime
         /// fixes the start of the year at January 1.
         /// </para>
         /// </remarks>
-        /// <value>A Gregorian calendar system with at least 4 days in the first week of a week-year.</value>
+        /// <value>A Gregorian calendar system.</value>
         public static CalendarSystem Gregorian => GregorianJulianCalendars.Gregorian;
 
         /// <summary>
@@ -657,9 +620,6 @@ namespace NodaTime
         /// assumes it did, thus it is proleptic. This implementation also fixes the
         /// start of the year at January 1.
         /// </remarks>
-        /// <para>
-        /// This calendar always has at least 4 days in the first week of the week-year.
-        /// </para>
         /// <value>A suitable Julian calendar reference; the same reference may be returned by several
         /// calls as the object is immutable and thread-safe.</value>
         public static CalendarSystem Julian => GregorianJulianCalendars.Julian;
@@ -682,9 +642,6 @@ namespace NodaTime
         /// sunset on the previous ISO day, but this has not been confirmed and is not
         /// implemented.
         /// </para>
-        /// <para>
-        /// This calendar always has at least 4 days in the first week of the week-year.
-        /// </para>
         /// </remarks>
         /// <value>A suitable Coptic calendar reference; the same reference may be returned by several
         /// calls as the object is immutable and thread-safe.</value>
@@ -704,7 +661,7 @@ namespace NodaTime
 
         /// <summary>
         /// Returns a Persian (also known as Solar Hijri) calendar system implementing the behaviour of the
-        /// BCL <code>PersianCalendar</code> before .NET 4.6, and the sole Persian calendar in Noda Time 1.3.
+        /// BCL <c>PersianCalendar</c> before .NET 4.6, and the sole Persian calendar in Noda Time 1.3.
         /// </summary>
         /// <remarks>
         /// This implementation uses a simple 33-year leap cycle, where years  1, 5, 9, 13, 17, 22, 26, and 30
@@ -715,7 +672,7 @@ namespace NodaTime
 
         /// <summary>
         /// Returns a Persian (also known as Solar Hijri) calendar system implementing the behaviour of the
-        /// BCL <code>PersianCalendar</code> from .NET 4.6 onwards (and Windows 10), and the astronomical
+        /// BCL <c>PersianCalendar</c> from .NET 4.6 onwards (and Windows 10), and the astronomical
         /// system described in Wikipedia and Calendrical Calculations.
         /// </summary>
         /// <remarks>
@@ -761,6 +718,33 @@ namespace NodaTime
         /// </remarks>
         /// <value>A calendar system for the Um Al Qura calendar.</value>
         public static CalendarSystem UmAlQura => MiscellaneousCalendars.UmAlQura;
+
+        // TODO: Move this after fixing https://github.com/nodatime/nodatime/issues/1269
+        [VisibleForTesting]
+        internal static CalendarSystem ForOrdinalUncached([Trusted] CalendarOrdinal ordinal) => ordinal switch
+        {
+            // This entry is really just for completeness. We'd never get called with this.
+            CalendarOrdinal.Iso => Iso,
+            CalendarOrdinal.Gregorian => Gregorian,
+            CalendarOrdinal.Julian => Julian,
+            CalendarOrdinal.Coptic => Coptic,
+            CalendarOrdinal.Badi => Badi,
+            CalendarOrdinal.HebrewCivil => HebrewCivil,
+            CalendarOrdinal.HebrewScriptural => HebrewScriptural,
+            CalendarOrdinal.PersianSimple => PersianSimple,
+            CalendarOrdinal.PersianArithmetic => PersianArithmetic,
+            CalendarOrdinal.PersianAstronomical => PersianAstronomical,
+            CalendarOrdinal.IslamicAstronomicalBase15 => GetIslamicCalendar(IslamicLeapYearPattern.Base15, IslamicEpoch.Astronomical),
+            CalendarOrdinal.IslamicAstronomicalBase16 => GetIslamicCalendar(IslamicLeapYearPattern.Base16, IslamicEpoch.Astronomical),
+            CalendarOrdinal.IslamicAstronomicalIndian => GetIslamicCalendar(IslamicLeapYearPattern.Indian, IslamicEpoch.Astronomical),
+            CalendarOrdinal.IslamicAstronomicalHabashAlHasib => GetIslamicCalendar(IslamicLeapYearPattern.HabashAlHasib, IslamicEpoch.Astronomical),
+            CalendarOrdinal.IslamicCivilBase15 => GetIslamicCalendar(IslamicLeapYearPattern.Base15, IslamicEpoch.Civil),
+            CalendarOrdinal.IslamicCivilBase16 => GetIslamicCalendar(IslamicLeapYearPattern.Base16, IslamicEpoch.Civil),
+            CalendarOrdinal.IslamicCivilIndian => GetIslamicCalendar(IslamicLeapYearPattern.Indian, IslamicEpoch.Civil),
+            CalendarOrdinal.IslamicCivilHabashAlHasib => GetIslamicCalendar(IslamicLeapYearPattern.HabashAlHasib, IslamicEpoch.Civil),
+            CalendarOrdinal.UmAlQura => UmAlQura,
+            _ => throw new InvalidOperationException($"Bug in Noda Time: calendar ordinal {ordinal} missing from switch in CalendarSystem.ForOrdinal.")
+        };
 
         // "Holder" classes for lazy initialization of calendar systems
 
@@ -812,6 +796,8 @@ namespace NodaTime
                 new CalendarSystem(CalendarOrdinal.Coptic, CopticId, CopticName, new CopticYearMonthDayCalculator(), Era.AnnoMartyrum);
             internal static readonly CalendarSystem UmAlQura =
                 new CalendarSystem(CalendarOrdinal.UmAlQura, UmAlQuraId, UmAlQuraName, new UmAlQuraYearMonthDayCalculator(), Era.AnnoHegirae);
+            internal static readonly CalendarSystem Badi =
+                new CalendarSystem(CalendarOrdinal.Badi, BadiId, BadiName, new BadiYearMonthDayCalculator(), Era.Bahai);
 
             // Static constructor to enforce laziness. This used to be important to avoid a Heisenbug.
             // I don't believe it's strictly required now, but it does no harm and I don't want to go

@@ -6,7 +6,6 @@ using NodaTime.Calendars;
 using NodaTime.Text;
 using NUnit.Framework;
 using System;
-using System.Globalization;
 using System.Linq;
 
 namespace NodaTime.Test.Calendars
@@ -211,6 +210,41 @@ namespace NodaTime.Test.Calendars
                                     .Sum(month => calculator.GetDaysInMonth(year, month));
                 Assert.AreEqual(sum, calculator.GetDaysInYear(year), "Days in {0}", year);
             }
+        }
+
+        [Test]
+        [TestCase("5502-01-01", "5503-01-01")]
+        [TestCase("5502-01-01", "5502-02-01", Description = "Months in same half of year")]
+        // This is the test that looks odd...
+        [TestCase("5502-12-01", "5502-02-01", Description = "Months in opposite half of year")]
+        [TestCase("5502-03-10", "5502-03-12")]
+        public void ScripturalCompare(string earlier, string later)
+        {
+            var pattern = LocalDatePattern.Iso.WithCalendar(CalendarSystem.HebrewScriptural);
+            var earlierDate = pattern.Parse(earlier).Value;
+            var laterDate = pattern.Parse(later).Value;
+            TestHelper.TestCompareToStruct(earlierDate, earlierDate, laterDate);
+        }
+
+        [Test]
+        public void ScripturalGetDaysFromStartOfYearToStartOfMonth_InvalidForCoverage()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => HebrewScripturalCalculator.GetDaysFromStartOfYearToStartOfMonth(5502, 0));
+        }
+
+        [Test]
+        [TestCase(HebrewMonthNumbering.Civil)]
+        [TestCase(HebrewMonthNumbering.Scriptural)]
+        public void PlusMonths_Overflow(HebrewMonthNumbering monthNumbering)
+        {
+            var calendar = CalendarSystem.GetHebrewCalendar(monthNumbering);
+            // TODO: It would be nice to have an easy way of getting the smallest/largest LocalDate for
+            // a calendar. Or possibly FromDayOfYear as well... instead, we'll just add/subtract 8 months instead
+            var earlyDate = new LocalDate(calendar.MinYear, 1, 1, calendar);
+            var lateDate = new LocalDate(calendar.MaxYear, 12, 1, calendar);
+
+            Assert.Throws<OverflowException>(() => earlyDate.PlusMonths(-7));
+            Assert.Throws<OverflowException>(() => lateDate.PlusMonths(7));
         }
 
         // Cases used for adding months and differences between months.

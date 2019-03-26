@@ -3,7 +3,6 @@
 // as found in the LICENSE.txt file.
 
 using System;
-using System.ComponentModel;
 using System.Globalization;
 using BenchmarkDotNet.Attributes;
 
@@ -61,8 +60,7 @@ namespace NodaTime.Benchmarks.BclTests
         [Category("Text")]
         public bool TryParseExact()
         {
-            DateTime result;
-            return DateTime.TryParseExact("26/12/2009 10:08:30", "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
+            return DateTime.TryParseExact("26/12/2009 10:08:30", "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime result);
         }
     }
 }

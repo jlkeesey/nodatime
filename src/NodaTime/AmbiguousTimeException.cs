@@ -35,9 +35,6 @@ namespace NodaTime
     /// <threadsafety>Any public static members of this type are thread safe. Any instance members are not guaranteed to be thread safe.
     /// See the thread safety section of the user guide for more information.
     /// </threadsafety>
-#if !PCL
-    [Serializable]
-#endif
     [Mutable] // Exception itself is mutable
     public sealed class AmbiguousTimeException : ArgumentOutOfRangeException
     {
@@ -51,7 +48,7 @@ namespace NodaTime
         /// The time zone in which the local date and time is ambiguous.
         /// </summary>
         /// <value>The time zone in which the local date and time is ambiguous.</value>
-        [NotNull] public DateTimeZone Zone => EarlierMapping.Zone;
+        public DateTimeZone Zone => EarlierMapping.Zone;
 
         /// <summary>
         /// Gets the earlier of the two occurrences of the local date and time within the time zone.

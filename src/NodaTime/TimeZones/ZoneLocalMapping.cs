@@ -24,7 +24,9 @@ namespace NodaTime.TimeZones
     /// <list type="bullet">
     ///   <item>
     ///     <term>Unambiguous mapping</term>
-    ///     <description>The local time occurs exactly once in the target time zone.</description>
+    ///     <description>
+    ///       The local time occurs exactly once in the target time zone.
+    ///     </description>
     ///   </item>
     ///   <item>
     ///     <term>Ambiguous mapping</term>
@@ -93,8 +95,8 @@ namespace NodaTime.TimeZones
         /// original local date and time.</value>
         public int Count { get; }
 
-        internal ZoneLocalMapping([Trusted] [NotNull] DateTimeZone zone, LocalDateTime localDateTime,
-            [Trusted] [NotNull] ZoneInterval earlyInterval, [Trusted] [NotNull] ZoneInterval lateInterval, int count)
+        internal ZoneLocalMapping([Trusted] DateTimeZone zone, LocalDateTime localDateTime,
+            [Trusted] ZoneInterval earlyInterval, [Trusted] ZoneInterval lateInterval, int count)
         {
             Preconditions.DebugCheckNotNull(zone, nameof(zone));
             Preconditions.DebugCheckNotNull(earlyInterval, nameof(earlyInterval));
@@ -126,6 +128,8 @@ namespace NodaTime.TimeZones
                 default: throw new InvalidOperationException("Can't happen");
             }
         }
+
+        // TODO: Reimplement as switch expressions after fixing https://github.com/nodatime/nodatime/issues/1269
 
         /// <summary>
         /// Returns a <see cref="ZonedDateTime"/> which maps to the original <see cref="T:NodaTime.LocalDateTime" />

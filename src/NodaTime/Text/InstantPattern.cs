@@ -28,7 +28,7 @@ namespace NodaTime.Text
         /// an instant as a UTC date/time in ISO-8601 style "uuuu-MM-ddTHH:mm:ss'Z'".
         /// </summary>
         /// <value>The general pattern, which always uses an invariant culture.</value>
-        public static InstantPattern GeneralPattern => Patterns.GeneralPatternImpl;
+        public static InstantPattern General => Patterns.GeneralPatternImpl;
 
         /// <summary>
         /// Gets an invariant instant pattern which is ISO-8601 compatible, providing up to 9 decimal places
@@ -37,7 +37,7 @@ namespace NodaTime.Text
         /// </summary>
         /// <value>An invariant instant pattern which is ISO-8601 compatible, providing up to 9 decimal places
         /// of sub-second accuracy.</value>
-        public static InstantPattern ExtendedIsoPattern => Patterns.ExtendedIsoPatternImpl;
+        public static InstantPattern ExtendedIso => Patterns.ExtendedIsoPatternImpl;
 
         private const string DefaultFormatPattern = "g";
 
@@ -61,15 +61,9 @@ namespace NodaTime.Text
         /// <value>The pattern text for this pattern, as supplied on creation.</value>
         public string PatternText { get; }
 
-        /// <summary>
-        /// Returns the localization information used in this pattern.
-        /// </summary>
-        internal NodaFormatInfo FormatInfo { get; }
-
-        private InstantPattern(string patternText, NodaFormatInfo formatInfo, IPattern<Instant> pattern)
+        private InstantPattern(string patternText, IPattern<Instant> pattern)
         {
-            this.PatternText = patternText;
-            this.FormatInfo = formatInfo;
+            PatternText = patternText;
             this.pattern = pattern;
         }
 
@@ -82,7 +76,7 @@ namespace NodaTime.Text
         /// </remarks>
         /// <param name="text">The text value to parse.</param>
         /// <returns>The result of parsing, which may be successful or unsuccessful.</returns>
-        public ParseResult<Instant> Parse(string text) => pattern.Parse(text);
+        public ParseResult<Instant> Parse([SpecialNullHandling] string text) => pattern.Parse(text);
 
         /// <summary>
         /// Formats the given instant as text according to the rules of this pattern.
@@ -98,7 +92,7 @@ namespace NodaTime.Text
         /// <param name="value">The value to format.</param>
         /// <param name="builder">The <c>StringBuilder</c> to append to.</param>
         /// <returns>The builder passed in as <paramref name="builder"/>.</returns>
-        public StringBuilder AppendFormat(Instant value, [NotNull] StringBuilder builder) => pattern.AppendFormat(value, builder);
+        public StringBuilder AppendFormat(Instant value, StringBuilder builder) => pattern.AppendFormat(value, builder);
 
         /// <summary>
         /// Creates a pattern for the given pattern text and format info.
@@ -107,12 +101,12 @@ namespace NodaTime.Text
         /// <param name="formatInfo">The format info to use in the pattern</param>
         /// <returns>A pattern for parsing and formatting instants.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        private static InstantPattern Create([NotNull] string patternText, [NotNull] NodaFormatInfo formatInfo)
+        private static InstantPattern Create(string patternText, NodaFormatInfo formatInfo)
         {
             Preconditions.CheckNotNull(patternText, nameof(patternText));
             Preconditions.CheckNotNull(formatInfo, nameof(formatInfo));
             var pattern = formatInfo.InstantPatternParser.ParsePattern(patternText);
-            return new InstantPattern(patternText, formatInfo, pattern);
+            return new InstantPattern(patternText, pattern);
         }
 
         /// <summary>
@@ -125,7 +119,7 @@ namespace NodaTime.Text
         /// <param name="cultureInfo">The culture to use in the pattern</param>
         /// <returns>A pattern for parsing and formatting instants.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static InstantPattern Create([NotNull] string patternText, [NotNull] CultureInfo cultureInfo) =>
+        public static InstantPattern Create(string patternText, CultureInfo cultureInfo) =>
             Create(patternText, NodaFormatInfo.GetFormatInfo(cultureInfo));
 
         /// <summary>
@@ -139,7 +133,7 @@ namespace NodaTime.Text
         /// <param name="patternText">Pattern text to create the pattern for</param>
         /// <returns>A pattern for parsing and formatting instants.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static InstantPattern CreateWithCurrentCulture([NotNull] string patternText) =>
+        public static InstantPattern CreateWithCurrentCulture(string patternText) =>
             Create(patternText, NodaFormatInfo.CurrentInfo);
 
         /// <summary>
@@ -151,7 +145,7 @@ namespace NodaTime.Text
         /// <param name="patternText">Pattern text to create the pattern for</param>
         /// <returns>A pattern for parsing and formatting instants.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static InstantPattern CreateWithInvariantCulture([NotNull] string patternText) =>
+        public static InstantPattern CreateWithInvariantCulture(string patternText) =>
             Create(patternText, NodaFormatInfo.InvariantInfo);
 
         /// <summary>
@@ -160,7 +154,7 @@ namespace NodaTime.Text
         /// </summary>
         /// <param name="formatInfo">The localization information to use in the new pattern.</param>
         /// <returns>A new pattern with the given localization information.</returns>
-        private InstantPattern WithFormatInfo([NotNull] NodaFormatInfo formatInfo) => Create(PatternText, formatInfo);
+        private InstantPattern WithFormatInfo(NodaFormatInfo formatInfo) => Create(PatternText, formatInfo);
 
         /// <summary>
         /// Creates a pattern for the same original pattern text as this pattern, but with the specified
@@ -168,7 +162,7 @@ namespace NodaTime.Text
         /// </summary>
         /// <param name="cultureInfo">The culture to use in the new pattern.</param>
         /// <returns>A new pattern with the given culture.</returns>
-        public InstantPattern WithCulture([NotNull] CultureInfo cultureInfo) =>
+        public InstantPattern WithCulture(CultureInfo cultureInfo) =>
             WithFormatInfo(NodaFormatInfo.GetFormatInfo(cultureInfo));
     }
 }

@@ -32,7 +32,7 @@ namespace NodaTime.Test
         {
             LocalDate date = new LocalDate(2010, 1, 1);
             // Call to ToString just to make it a valid statement
-            Assert.Throws<ArgumentNullException>(() => (date + (Period)null).ToString());
+            Assert.Throws<ArgumentNullException>(() => (date + (Period)null!).ToString());
         }
 
         [Test]
@@ -58,7 +58,7 @@ namespace NodaTime.Test
         {
             LocalDate date = new LocalDate(2010, 1, 1);
             // Call to ToString just to make it a valid statement
-            Assert.Throws<ArgumentNullException>(() => (date - (Period)null).ToString());
+            Assert.Throws<ArgumentNullException>(() => (date - (Period)null!).ToString());
         }
 
         [Test]
@@ -99,6 +99,22 @@ namespace NodaTime.Test
             Assert.AreEqual(period, end - start);
             Assert.AreEqual(period, LocalDate.Subtract(end, start));
             Assert.AreEqual(period, end.Minus(start));
+        }
+
+        [Test]
+        [TestCase(9999, 12, 31, 1)]
+        [TestCase(9999, 12, 1, 1)]
+        [TestCase(9999, 11, 30, 2)]
+        [TestCase(9999, 11, 1, 2)]
+        [TestCase(9998, 12, 31, 13)]
+        [TestCase(9998, 12, 1, 13)]
+        [TestCase(-9998, 1, 1, -1)]
+        [TestCase(-9998, 2, 1, -2)]
+        [TestCase(-9997, 1, 1, -13)]
+        public void PlusMonths_Overflow(int year, int month, int day, int monthsToAdd)
+        {
+            var start = new LocalDate(year, month, day);
+            Assert.Throws<OverflowException>(() => start.PlusMonths(monthsToAdd));
         }
     }
 }

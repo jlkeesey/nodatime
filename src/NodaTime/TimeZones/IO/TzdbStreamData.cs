@@ -16,7 +16,7 @@ namespace NodaTime.TimeZones.IO
     /// </summary>
     internal sealed class TzdbStreamData
     {
-        private static readonly Dictionary<TzdbStreamFieldId, Action<Builder, TzdbStreamField>> FieldHanders =
+        private static readonly Dictionary<TzdbStreamFieldId, Action<Builder, TzdbStreamField>> FieldHandlers =
             new Dictionary<TzdbStreamFieldId, Action<Builder, TzdbStreamField>>
         {
             [TzdbStreamFieldId.StringPool] = (builder, field) => builder.HandleStringPoolField(field),
@@ -24,7 +24,6 @@ namespace NodaTime.TimeZones.IO
             [TzdbStreamFieldId.TzdbIdMap] = (builder, field) => builder.HandleTzdbIdMapField(field),
             [TzdbStreamFieldId.TzdbVersion] = (builder, field) => builder.HandleTzdbVersionField(field),
             [TzdbStreamFieldId.CldrSupplementalWindowsZones] = (builder, field) => builder.HandleSupplementalWindowsZonesField(field),
-            [TzdbStreamFieldId.WindowsAdditionalStandardNameToIdMapping] = (builder, field) => builder.HandleWindowsAdditionalStandardNameToIdMappingField(field),
             [TzdbStreamFieldId.ZoneLocations] = (builder, field) => builder.HandleZoneLocationsField(field),
             [TzdbStreamFieldId.Zone1970Locations] = (builder, field) => builder.HandleZone1970LocationsField(field)
         };
@@ -37,37 +36,31 @@ namespace NodaTime.TimeZones.IO
         /// <summary>
         /// Returns the TZDB version string.
         /// </summary>
-        [NotNull] public string TzdbVersion { get; }
+        public string TzdbVersion { get; }
 
         /// <summary>
         /// Returns the TZDB ID dictionary (alias to canonical ID). This needn't be read-only; it won't be
         /// exposed directly.
         /// </summary>
-        [NotNull] public IDictionary<string, string> TzdbIdMap { get; }
+        public IDictionary<string, string> TzdbIdMap { get; }
 
         /// <summary>
         /// Returns the Windows mapping dictionary. (As the type is immutable, it can be exposed directly
         /// to callers.)
         /// </summary>
-        [NotNull] public WindowsZones WindowsMapping { get; }
+        public WindowsZones WindowsMapping { get; }
 
         /// <summary>
         /// Returns the zone locations for the source, or null if no location data is available.
         /// This needn't be a read-only collection; it won't be exposed directly.
         /// </summary>
-        public IList<TzdbZoneLocation> ZoneLocations { get; }
+        public IList<TzdbZoneLocation>? ZoneLocations { get; }
 
         /// <summary>
         /// Returns the "zone 1970" locations for the source, or null if no such location data is available.
         /// This needn't be a read-only collection; it won't be exposed directly.
         /// </summary>
-        public IList<TzdbZone1970Location> Zone1970Locations { get; }
-
-        /// <summary>
-        /// Additional mappings from Windows standard name to TZDB ID. Primarily used in
-        /// the PCL build, where we can't get at the system ID. This never returns null.
-        /// </summary>
-        public IDictionary<string, string> WindowsAdditionalStandardNameToIdMapping { get; }
+        public IList<TzdbZone1970Location>? Zone1970Locations { get; }
 
         private TzdbStreamData(Builder builder)
         {
@@ -84,9 +77,6 @@ namespace NodaTime.TimeZones.IO
             {
                 TzdbIdMap[id] = id;
             }
-
-            WindowsAdditionalStandardNameToIdMapping = CheckNotNull(builder.windowsAdditionalStandardNameToIdMapping,
-                "Windows additional standard name to ID mapping");
         }
 
         /// <summary>
@@ -95,7 +85,7 @@ namespace NodaTime.TimeZones.IO
         /// </summary>
         /// <param name="id">ID for the returned zone, which may be an alias.</param>
         /// <param name="canonicalId">Canonical ID for zone data</param>
-        public DateTimeZone CreateZone([NotNull] string id, [NotNull] string canonicalId)
+        public DateTimeZone CreateZone(string id, string canonicalId)
         {
             Preconditions.CheckNotNull(id, nameof(id));
             Preconditions.CheckNotNull(canonicalId, nameof(canonicalId));
@@ -105,29 +95,27 @@ namespace NodaTime.TimeZones.IO
                 // Skip over the ID before the zone data itself
                 reader.ReadString();
                 var type = (DateTimeZoneWriter.DateTimeZoneType)reader.ReadByte();
-                switch (type)
+                return type switch
                 {
-                    case DateTimeZoneWriter.DateTimeZoneType.Fixed:
-                        return FixedDateTimeZone.Read(reader, id);
-                    case DateTimeZoneWriter.DateTimeZoneType.Precalculated:
-                        return CachedDateTimeZone.ForZone(PrecalculatedDateTimeZone.Read(reader, id));
-                    default:
-                            throw new InvalidNodaDataException("Unknown time zone type " + type);
-                }
+                    DateTimeZoneWriter.DateTimeZoneType.Fixed => FixedDateTimeZone.Read(reader, id),
+                    DateTimeZoneWriter.DateTimeZoneType.Precalculated =>
+                    CachedDateTimeZone.ForZone(PrecalculatedDateTimeZone.Read(reader, id)),
+                    _ => throw new InvalidNodaDataException("Unknown time zone type " + type)
+                };
             }
         }
 
         // Like Preconditions.CheckNotNull, but specifically for incomplete data.
-        private static T CheckNotNull<T>(T input, string name) where T : class
+        private static T CheckNotNull<T>(T? input, string name) where T : class
         {
-            if (input == null)
+            if (input is null)
             {
                 throw new InvalidNodaDataException("Incomplete TZDB data. Missing field: " + name);
             }
             return input;
         }
 
-        internal static TzdbStreamData FromStream([NotNull] Stream stream)
+        internal static TzdbStreamData FromStream(Stream stream)
         {
             Preconditions.CheckNotNull(stream, nameof(stream));
             int version = new BinaryReader(stream).ReadInt32();
@@ -139,8 +127,7 @@ namespace NodaTime.TimeZones.IO
             foreach (var field in TzdbStreamField.ReadFields(stream))
             {
                 // Only handle fields we know about
-                Action<Builder, TzdbStreamField> handler;
-                if (FieldHanders.TryGetValue(field.Id, out handler))
+                if (FieldHandlers.TryGetValue(field.Id, out Action<Builder, TzdbStreamField> handler))
                 {
                     handler(builder, field);
                 }
@@ -153,14 +140,13 @@ namespace NodaTime.TimeZones.IO
         /// </summary>
         private class Builder
         {
-            internal IList<string> stringPool;
-            internal string tzdbVersion;
-            internal IDictionary<string, string> tzdbIdMap;
-            internal IList<TzdbZoneLocation> zoneLocations = null;
-            internal IList<TzdbZone1970Location> zone1970Locations = null;
-            internal WindowsZones windowsMapping;
+            internal IList<string>? stringPool;
+            internal string? tzdbVersion;
+            internal IDictionary<string, string>? tzdbIdMap;
+            internal IList<TzdbZoneLocation>? zoneLocations = null;
+            internal IList<TzdbZone1970Location>? zone1970Locations = null;
+            internal WindowsZones? windowsMapping;
             internal readonly IDictionary<string, TzdbStreamField> zoneFields = new Dictionary<string, TzdbStreamField>();
-            internal IDictionary<string, string> windowsAdditionalStandardNameToIdMapping;
 
             internal void HandleStringPoolField(TzdbStreamField field)
             {
@@ -212,17 +198,6 @@ namespace NodaTime.TimeZones.IO
                 windowsMapping = field.ExtractSingleValue(WindowsZones.Read, stringPool);
             }
 
-            internal void HandleWindowsAdditionalStandardNameToIdMappingField(TzdbStreamField field)
-            {
-                // Even on the non-portable build, we still read the data: the cost is minimal, and it makes
-                // it much simpler to validate.
-                if (windowsMapping == null)
-                {
-                    throw new InvalidNodaDataException("Field " + field.Id + " without earlier Windows mapping field");
-                }
-                windowsAdditionalStandardNameToIdMapping = field.ExtractSingleValue(reader => reader.ReadDictionary(), stringPool);
-            }
-
             internal void HandleZoneLocationsField(TzdbStreamField field)
             {
                 CheckSingleField(field, zoneLocations);
@@ -257,7 +232,7 @@ namespace NodaTime.TimeZones.IO
                 }
             }
 
-            private void CheckSingleField(TzdbStreamField field, object expectedNullField)
+            private void CheckSingleField(TzdbStreamField field, object? expectedNullField)
             {
                 if (expectedNullField != null)
                 {
@@ -267,7 +242,7 @@ namespace NodaTime.TimeZones.IO
 
             private void CheckStringPoolPresence(TzdbStreamField field)
             {
-                if (stringPool == null)
+                if (stringPool is null)
                 {
                     throw new InvalidNodaDataException("String pool must be present before field " + field.Id);
                 }

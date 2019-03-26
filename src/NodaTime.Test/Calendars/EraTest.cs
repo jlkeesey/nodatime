@@ -3,7 +3,7 @@
 // as found in the LICENSE.txt file.
 
 using NodaTime.Calendars;
-using NodaTime.Properties;
+using NodaTime.Globalization;
 using NUnit.Framework;
 using System.Collections.Generic;
 using System.Globalization;
@@ -24,8 +24,8 @@ namespace NodaTime.Test.Calendars
         [Test]
         public void ResourcePresence(Era era)
         {
-            Assert.NotNull(PatternResources.ResourceManager.GetString(era.ResourceIdentifier, CultureInfo.InvariantCulture),
-                "Missing resource for " + era.ResourceIdentifier);
+            var valueByName = PatternResources.ResourceManager.GetString(era.ResourceIdentifier, CultureInfo.InvariantCulture);
+            Assert.NotNull(valueByName, "Missing resource for " + era.ResourceIdentifier);
         }
     }
 }

@@ -25,10 +25,18 @@ namespace NodaTime.Text
     {
         /// <summary>
         /// Gets the general pattern for durations using the invariant culture, with a format string of "-D:hh:mm:ss.FFFFFFFFF".
-        /// This pattern round-trips.
+        /// This pattern round-trips. This corresponds to the "o" standard pattern.
         /// </summary>
         /// <value>The general pattern for durations using the invariant culture.</value>
-        public static DurationPattern RoundtripPattern => Patterns.RoundtripPatternImpl;
+        public static DurationPattern Roundtrip => Patterns.RoundtripPatternImpl;
+
+        /// <summary>
+        /// Gets a pattern for durations using the invariant culture, with a format string of "-H:mm:ss.FFFFFFFFF".
+        /// This pattern round-trips, and is the pattern that NodaTime.Serialization.JsonNet uses by default.
+        /// This corresponds to the "j" standard pattern.
+        /// </summary>
+        /// <value>The pattern for durations using the invariant culture. This is the pattern that NodaTime.Serialization.JsonNet uses by default.</value>
+        public static DurationPattern JsonRoundtrip => Patterns.JsonRoundtripPatternImpl;
 
         internal static readonly PatternBclSupport<Duration> BclSupport = new PatternBclSupport<Duration>("o", fi => fi.DurationPatternParser);
 
@@ -36,6 +44,7 @@ namespace NodaTime.Text
         internal static class Patterns
         {
             internal static readonly DurationPattern RoundtripPatternImpl = CreateWithInvariantCulture("-D:hh:mm:ss.FFFFFFFFF");
+            internal static readonly DurationPattern JsonRoundtripPatternImpl = CreateWithInvariantCulture("-H:mm:ss.FFFFFFFFF");
         }
 
         private readonly IPattern<Duration> pattern;
@@ -45,16 +54,10 @@ namespace NodaTime.Text
         /// </summary>
         /// <value>The pattern text for this pattern, as supplied on creation.</value>
         public string PatternText { get; }
-
-        /// <summary>
-        /// Gets the localization information used in this pattern.
-        /// </summary>
-        internal NodaFormatInfo FormatInfo { get; }
-
-        private DurationPattern(string patternText, NodaFormatInfo formatInfo, IPattern<Duration> pattern)
+        
+        private DurationPattern(string patternText, IPattern<Duration> pattern)
         {
             this.PatternText = patternText;
-            this.FormatInfo = formatInfo;
             this.pattern = pattern;
         }
 
@@ -67,7 +70,7 @@ namespace NodaTime.Text
         /// </remarks>
         /// <param name="text">The text value to parse.</param>
         /// <returns>The result of parsing, which may be successful or unsuccessful.</returns>
-        public ParseResult<Duration> Parse(string text) => pattern.Parse(text);
+        public ParseResult<Duration> Parse([SpecialNullHandling] string text) => pattern.Parse(text);
 
         /// <summary>
         /// Formats the given duration as text according to the rules of this pattern.
@@ -83,7 +86,7 @@ namespace NodaTime.Text
         /// <param name="value">The value to format.</param>
         /// <param name="builder">The <c>StringBuilder</c> to append to.</param>
         /// <returns>The builder passed in as <paramref name="builder"/>.</returns>
-        public StringBuilder AppendFormat(Duration value, [NotNull] StringBuilder builder) => pattern.AppendFormat(value, builder);
+        public StringBuilder AppendFormat(Duration value, StringBuilder builder) => pattern.AppendFormat(value, builder);
 
         /// <summary>
         /// Creates a pattern for the given pattern text and format info.
@@ -92,12 +95,12 @@ namespace NodaTime.Text
         /// <param name="formatInfo">Localization information</param>
         /// <returns>A pattern for parsing and formatting offsets.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        private static DurationPattern Create([NotNull] string patternText, [NotNull] NodaFormatInfo formatInfo)
+        private static DurationPattern Create(string patternText, NodaFormatInfo formatInfo)
         {
             Preconditions.CheckNotNull(patternText, nameof(patternText));
             Preconditions.CheckNotNull(formatInfo, nameof(formatInfo));
             var pattern = formatInfo.DurationPatternParser.ParsePattern(patternText);
-            return new DurationPattern(patternText, formatInfo, pattern);
+            return new DurationPattern(patternText, pattern);
         }
 
         /// <summary>
@@ -110,7 +113,7 @@ namespace NodaTime.Text
         /// <param name="cultureInfo">The culture to use in the pattern</param>
         /// <returns>A pattern for parsing and formatting offsets.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static DurationPattern Create([NotNull] string patternText, [NotNull] CultureInfo cultureInfo) =>
+        public static DurationPattern Create(string patternText, CultureInfo cultureInfo) =>
             Create(patternText, NodaFormatInfo.GetFormatInfo(cultureInfo));
 
         /// <summary>
@@ -124,7 +127,7 @@ namespace NodaTime.Text
         /// <param name="patternText">Pattern text to create the pattern for</param>
         /// <returns>A pattern for parsing and formatting offsets.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static DurationPattern CreateWithCurrentCulture([NotNull] string patternText) =>
+        public static DurationPattern CreateWithCurrentCulture(string patternText) =>
             Create(patternText, NodaFormatInfo.CurrentInfo);
 
         /// <summary>
@@ -138,7 +141,7 @@ namespace NodaTime.Text
         /// <param name="patternText">Pattern text to create the pattern for</param>
         /// <returns>A pattern for parsing and formatting offsets.</returns>
         /// <exception cref="InvalidPatternException">The pattern text was invalid.</exception>
-        public static DurationPattern CreateWithInvariantCulture([NotNull] string patternText) =>
+        public static DurationPattern CreateWithInvariantCulture(string patternText) =>
             Create(patternText, NodaFormatInfo.InvariantInfo);
 
         /// <summary>
@@ -147,7 +150,7 @@ namespace NodaTime.Text
         /// </summary>
         /// <param name="cultureInfo">The culture to use in the new pattern.</param>
         /// <returns>A new pattern with the given culture.</returns>
-        public DurationPattern WithCulture([NotNull] CultureInfo cultureInfo) =>
+        public DurationPattern WithCulture(CultureInfo cultureInfo) =>
             Create(PatternText, NodaFormatInfo.GetFormatInfo(cultureInfo));
     }
 }

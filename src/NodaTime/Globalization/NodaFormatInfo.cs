@@ -2,27 +2,30 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Globalization;
 using JetBrains.Annotations;
+using NodaTime.Annotations;
 using NodaTime.Calendars;
-using NodaTime.Properties;
 using NodaTime.Text;
 using NodaTime.Text.Patterns;
 using NodaTime.TimeZones;
 using NodaTime.Utility;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
 
 namespace NodaTime.Globalization
 {
     /// <summary>
-    /// A <see cref="IFormatProvider"/> for Noda Time types, initialised from a <see cref="CultureInfo"/>.
+    /// A <see cref="IFormatProvider"/> for Noda Time types, usually initialised from a <see cref="System.Globalization.CultureInfo"/>.
     /// This provides a single place defining how NodaTime values are formatted and displayed, depending on the culture.
     /// </summary>
     /// <remarks>
     /// Currently this is "shallow-immutable" - although none of these properties can be changed, the
-    /// CultureInfo itself may be mutable. In the future we will make this fully immutable.
+    /// CultureInfo itself may be mutable. If the CultureInfo is mutated after initialization, results are not
+    /// guaranteed: some aspects of the CultureInfo may be extracted at initialization time, others may be
+    /// extracted on first demand but cached, and others may be extracted on-demand each time.
     /// </remarks>
     /// <threadsafety>Instances which use read-only CultureInfo instances are immutable,
     /// and may be used freely between threads. Instances with mutable cultures should not be shared between threads
@@ -36,16 +39,20 @@ namespace NodaTime.Globalization
         private static readonly string[] ShortInvariantMonthNames = (string[]) CultureInfo.InvariantCulture.DateTimeFormat.AbbreviatedMonthNames.Clone();
         private static readonly string[] LongInvariantMonthNames = (string[]) CultureInfo.InvariantCulture.DateTimeFormat.MonthNames.Clone();
 
-        #region Patterns
         private readonly object fieldLock = new object();
-        private FixedFormatInfoPatternParser<Duration> durationPatternParser;
-        private FixedFormatInfoPatternParser<Offset> offsetPatternParser;
-        private FixedFormatInfoPatternParser<Instant> instantPatternParser;
-        private FixedFormatInfoPatternParser<LocalTime> localTimePatternParser;
-        private FixedFormatInfoPatternParser<LocalDate> localDatePatternParser;
-        private FixedFormatInfoPatternParser<LocalDateTime> localDateTimePatternParser;
-        private FixedFormatInfoPatternParser<OffsetDateTime> offsetDateTimePatternParser;
-        private FixedFormatInfoPatternParser<ZonedDateTime> zonedDateTimePatternParser;
+
+        #region Patterns
+        private FixedFormatInfoPatternParser<Duration>? durationPatternParser;
+        private FixedFormatInfoPatternParser<Offset>? offsetPatternParser;
+        private FixedFormatInfoPatternParser<Instant>? instantPatternParser;
+        private FixedFormatInfoPatternParser<LocalTime>? localTimePatternParser;
+        private FixedFormatInfoPatternParser<LocalDate>? localDatePatternParser;
+        private FixedFormatInfoPatternParser<LocalDateTime>? localDateTimePatternParser;
+        private FixedFormatInfoPatternParser<OffsetDateTime>? offsetDateTimePatternParser;
+        private FixedFormatInfoPatternParser<OffsetDate>? offsetDatePatternParser;
+        private FixedFormatInfoPatternParser<OffsetTime>? offsetTimePatternParser;
+        private FixedFormatInfoPatternParser<ZonedDateTime>? zonedDateTimePatternParser;
+        private FixedFormatInfoPatternParser<AnnualDate>? annualDatePatternParser;
         #endregion
 
         /// <summary>
@@ -55,37 +62,47 @@ namespace NodaTime.Globalization
         public static readonly NodaFormatInfo InvariantInfo = new NodaFormatInfo(CultureInfo.InvariantCulture);
 
         // Justification for max size: CultureInfo.GetCultures(CultureTypes.AllCultures) returns 378 cultures
-        // on Windows 8 in mid-2013. 500 should be ample, without being enormous.
+        // on Windows 8 in mid-2013. In late 2016 on Windows 10 it's 832, but it's unlikely that they'll all be
+        // used by any particular application.
+        // 500 should be ample for almost all cases, without being enormous.
         private static readonly Cache<CultureInfo, NodaFormatInfo> Cache = new Cache<CultureInfo, NodaFormatInfo>
             (500, culture => new NodaFormatInfo(culture), new ReferenceEqualityComparer<CultureInfo>());
 
-#if PCL
-        private readonly string dateSeparator;
-        private readonly string timeSeparator;
-#endif
-        private IList<string> longMonthNames;
-        private IList<string> longMonthGenitiveNames;
-        private IList<string> longDayNames;
-        private IList<string> shortMonthNames;
-        private IList<string> shortMonthGenitiveNames;
-        private IList<string> shortDayNames;
+        private IList<string>? longMonthNames;
+        private IList<string>? longMonthGenitiveNames;
+        private IList<string>? longDayNames;
+        private IList<string>? shortMonthNames;
+        private IList<string>? shortMonthGenitiveNames;
+        private IList<string>? shortDayNames;
 
-        private readonly Dictionary<Era, EraDescription> eraDescriptions;
+        private readonly ConcurrentDictionary<Era, EraDescription> eraDescriptions;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="NodaFormatInfo" /> class.
+        /// Initializes a new instance of the <see cref="NodaFormatInfo" /> class based solely
+        /// on a <see cref="System.Globalization.CultureInfo"/>.
         /// </summary>
-        /// <param name="cultureInfo">The culture info to base this on.</param>
-        internal NodaFormatInfo([NotNull] CultureInfo cultureInfo)
+        /// <param name="cultureInfo">The culture info to use.</param>
+        [VisibleForTesting]
+        internal NodaFormatInfo(CultureInfo cultureInfo)
+            : this(cultureInfo, cultureInfo?.DateTimeFormat)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="NodaFormatInfo" /> class based on
+        /// potentially disparate <see cref="System.Globalization.CultureInfo"/> and
+        /// <see cref="DateTimeFormatInfo"/> instances.
+        /// </summary>
+        /// <param name="cultureInfo">The culture info to use for text comparisons and resource lookups.</param>
+        /// <param name="dateTimeFormat">The date/time format to use for format strings etc.</param>
+        [VisibleForTesting]
+        internal NodaFormatInfo(CultureInfo cultureInfo, DateTimeFormatInfo dateTimeFormat)
         {
             Preconditions.CheckNotNull(cultureInfo, nameof(cultureInfo));
-            this.CultureInfo = cultureInfo;
-            eraDescriptions = new Dictionary<Era, EraDescription>();
-#if PCL
-            // Horrible, but it does the job...
-            dateSeparator = DateTime.MinValue.ToString("%/", cultureInfo);
-            timeSeparator = DateTime.MinValue.ToString("%:", cultureInfo);
-#endif
+            Preconditions.CheckNotNull(dateTimeFormat, nameof(dateTimeFormat));
+            CultureInfo = cultureInfo;
+            DateTimeFormat = dateTimeFormat;
+            eraDescriptions = new ConcurrentDictionary<Era, EraDescription>();
         }
 
         private void EnsureMonthsInitialized()
@@ -97,20 +114,20 @@ namespace NodaTime.Globalization
                     return;
                 }
                 // Turn month names into 1-based read-only lists
-                longMonthNames = ConvertMonthArray(CultureInfo.DateTimeFormat.MonthNames);
-                shortMonthNames = ConvertMonthArray(CultureInfo.DateTimeFormat.AbbreviatedMonthNames);
-                longMonthGenitiveNames = ConvertGenitiveMonthArray(longMonthNames, CultureInfo.DateTimeFormat.MonthGenitiveNames, LongInvariantMonthNames);
-                shortMonthGenitiveNames = ConvertGenitiveMonthArray(shortMonthNames, CultureInfo.DateTimeFormat.AbbreviatedMonthGenitiveNames, ShortInvariantMonthNames);
+                longMonthNames = ConvertMonthArray(DateTimeFormat.MonthNames);
+                shortMonthNames = ConvertMonthArray(DateTimeFormat.AbbreviatedMonthNames);
+                longMonthGenitiveNames = ConvertGenitiveMonthArray(longMonthNames, DateTimeFormat.MonthGenitiveNames, LongInvariantMonthNames);
+                shortMonthGenitiveNames = ConvertGenitiveMonthArray(shortMonthNames, DateTimeFormat.AbbreviatedMonthGenitiveNames, ShortInvariantMonthNames);
             }
         }
 
         /// <summary>
-        /// The BCL returns arrays of month names starting at 0; we want a read-only list starting at 1 (with 0 as null).
+        /// The BCL returns arrays of month names starting at 0; we want a read-only list starting at 1 (with 0 as an empty string).
         /// </summary>
         private static IList<string> ConvertMonthArray(string[] monthNames)
         {
             List<string> list = new List<string>(monthNames);
-            list.Insert(0, null);
+            list.Insert(0, "");
             return new ReadOnlyCollection<string>(list);
         }
 
@@ -122,20 +139,20 @@ namespace NodaTime.Globalization
                 {
                     return;
                 }
-                longDayNames = ConvertDayArray(CultureInfo.DateTimeFormat.DayNames);
-                shortDayNames = ConvertDayArray(CultureInfo.DateTimeFormat.AbbreviatedDayNames);
+                longDayNames = ConvertDayArray(DateTimeFormat.DayNames);
+                shortDayNames = ConvertDayArray(DateTimeFormat.AbbreviatedDayNames);
             }
         }
 
         /// <summary>
-        /// The BCL returns arrays of week names starting at 0 as Sunday; we want a read-only list starting at 1 (with 0 as null)
+        /// The BCL returns arrays of week names starting at 0 as Sunday; we want a read-only list starting at 1 (with 0 as an empty string)
         /// and with 7 as Sunday.
         /// </summary>
         private static IList<string> ConvertDayArray(string[] dayNames)
         {
             List<string> list = new List<string>(dayNames);
             list.Add(dayNames[0]);
-            list[0] = null;
+            list[0] = "";
             return new ReadOnlyCollection<string>(list);
         }
 
@@ -158,8 +175,7 @@ namespace NodaTime.Globalization
         /// </remarks>
         private IList<string> ConvertGenitiveMonthArray(IList<string> nonGenitiveNames, string[] bclNames, string[] invariantNames)
         {
-            int ignored;
-            if (int.TryParse(bclNames[0], out ignored))
+            if (int.TryParse(bclNames[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var _))
             {
                 return nonGenitiveNames;
             }
@@ -174,7 +190,8 @@ namespace NodaTime.Globalization
         }
 
         /// <summary>
-        /// Gets the culture info associated with this format provider.
+        /// Gets the culture info associated with this format provider. This is used
+        /// for resource lookups and text comparisons.
         /// </summary>
         public CultureInfo CultureInfo { get; }
 
@@ -190,18 +207,32 @@ namespace NodaTime.Globalization
         internal FixedFormatInfoPatternParser<LocalDate> LocalDatePatternParser => EnsureFixedFormatInitialized(ref localDatePatternParser, () => new LocalDatePatternParser(LocalDatePattern.DefaultTemplateValue));
         internal FixedFormatInfoPatternParser<LocalDateTime> LocalDateTimePatternParser => EnsureFixedFormatInitialized(ref localDateTimePatternParser, () => new LocalDateTimePatternParser(LocalDateTimePattern.DefaultTemplateValue));
         internal FixedFormatInfoPatternParser<OffsetDateTime> OffsetDateTimePatternParser => EnsureFixedFormatInitialized(ref offsetDateTimePatternParser, () => new OffsetDateTimePatternParser(OffsetDateTimePattern.DefaultTemplateValue));
+        internal FixedFormatInfoPatternParser<OffsetDate> OffsetDatePatternParser => EnsureFixedFormatInitialized(ref offsetDatePatternParser, () => new OffsetDatePatternParser(OffsetDatePattern.DefaultTemplateValue));
+        internal FixedFormatInfoPatternParser<OffsetTime> OffsetTimePatternParser => EnsureFixedFormatInitialized(ref offsetTimePatternParser, () => new OffsetTimePatternParser(OffsetTimePattern.DefaultTemplateValue));
         internal FixedFormatInfoPatternParser<ZonedDateTime> ZonedDateTimePatternParser => EnsureFixedFormatInitialized(ref zonedDateTimePatternParser, () => new ZonedDateTimePatternParser(ZonedDateTimePattern.DefaultTemplateValue, Resolvers.StrictResolver, null));
+        internal FixedFormatInfoPatternParser<AnnualDate> AnnualDatePatternParser => EnsureFixedFormatInitialized(ref annualDatePatternParser, () => new AnnualDatePatternParser(AnnualDatePattern.DefaultTemplateValue));
 
-        private FixedFormatInfoPatternParser<T> EnsureFixedFormatInitialized<T>(ref FixedFormatInfoPatternParser<T> field,
+        private FixedFormatInfoPatternParser<T> EnsureFixedFormatInitialized<T>(ref FixedFormatInfoPatternParser<T>? field,
             Func<IPatternParser<T>> patternParserFactory)
         {
             lock (fieldLock)
             {
-                if (field == null)
+                if (field != null)
                 {
-                    field = new FixedFormatInfoPatternParser<T>(patternParserFactory(), this);
+                    return field;
                 }
-                return field;
+            }
+            // Construct the cache outside the lock to avoid possible deadlocks. The locally constructed
+            // version is ignored if another thread has set the field in-between: this returns a consistent result,
+            // but can occasionally perform redundant work.
+            var localConstruction = new FixedFormatInfoPatternParser<T>(patternParserFactory(), this);
+            lock (fieldLock)
+            {
+                if (field is null)
+                {
+                    field = localConstruction;
+                }
+                return field!;
             }
         }
 
@@ -210,13 +241,13 @@ namespace NodaTime.Globalization
         /// See the usage guide for caveats around the use of these names for other calendars.
         /// Element 0 of the list is null, to allow a more natural mapping from (say) 1 to the string "January".
         /// </summary>
-        public IList<string> LongMonthNames { get { EnsureMonthsInitialized();  return longMonthNames; } }
+        public IList<string> LongMonthNames { get { EnsureMonthsInitialized();  return longMonthNames!; } }
         /// <summary>
         /// Returns a read-only list of the abbreviated names of the months for the default calendar for this culture.
         /// See the usage guide for caveats around the use of these names for other calendars.
         /// Element 0 of the list is null, to allow a more natural mapping from (say) 1 to the string "Jan".
         /// </summary>
-        public IList<string> ShortMonthNames { get { EnsureMonthsInitialized(); return shortMonthNames; } }
+        public IList<string> ShortMonthNames { get { EnsureMonthsInitialized(); return shortMonthNames!; } }
         /// <summary>
         /// Returns a read-only list of the names of the months for the default calendar for this culture.
         /// See the usage guide for caveats around the use of these names for other calendars.
@@ -225,7 +256,7 @@ namespace NodaTime.Globalization
         /// If the culture does not use genitive month names, this property will return the same reference as
         /// <see cref="LongMonthNames"/>.
         /// </summary>
-        public IList<string> LongMonthGenitiveNames { get { EnsureMonthsInitialized(); return longMonthGenitiveNames; } }
+        public IList<string> LongMonthGenitiveNames { get { EnsureMonthsInitialized(); return longMonthGenitiveNames!; } }
         /// <summary>
         /// Returns a read-only list of the abbreviated names of the months for the default calendar for this culture.
         /// See the usage guide for caveats around the use of these names for other calendars.
@@ -234,38 +265,33 @@ namespace NodaTime.Globalization
         /// If the culture does not use genitive month names, this property will return the same reference as
         /// <see cref="ShortMonthNames"/>.
         /// </summary>
-        public IList<string> ShortMonthGenitiveNames { get { EnsureMonthsInitialized(); return shortMonthGenitiveNames; } }
+        public IList<string> ShortMonthGenitiveNames { get { EnsureMonthsInitialized(); return shortMonthGenitiveNames!; } }
         /// <summary>
         /// Returns a read-only list of the names of the days of the week for the default calendar for this culture.
         /// See the usage guide for caveats around the use of these names for other calendars.
         /// Element 0 of the list is null, and the other elements correspond with the index values returned from
         /// <see cref="LocalDateTime.DayOfWeek"/> and similar properties.
         /// </summary>
-        public IList<string> LongDayNames { get { EnsureDaysInitialized(); return longDayNames; } }
+        public IList<string> LongDayNames { get { EnsureDaysInitialized(); return longDayNames!; } }
         /// <summary>
         /// Returns a read-only list of the abbreviated names of the days of the week for the default calendar for this culture.
         /// See the usage guide for caveats around the use of these names for other calendars.
         /// Element 0 of the list is null, and the other elements correspond with the index values returned from
         /// <see cref="LocalDateTime.DayOfWeek"/> and similar properties.
         /// </summary>
-        public IList<string> ShortDayNames { get { EnsureDaysInitialized(); return shortDayNames; } }
+        public IList<string> ShortDayNames { get { EnsureDaysInitialized(); return shortDayNames!; } }
 
         /// <summary>
         /// Gets the BCL date time format associated with this formatting information.
         /// </summary>
-        public DateTimeFormatInfo DateTimeFormat => CultureInfo.DateTimeFormat;
+        /// <remarks>
+        /// This is usually the <see cref="DateTimeFormatInfo"/> from <see cref="CultureInfo"/>,
+        /// but in some cases they're different: if a DateTimeFormatInfo is provided with no
+        /// CultureInfo, that's used for format strings but the invariant culture is used for
+        /// text comparisons and culture lookups for non-BCL formats (such as Offset) and for error messages.
+        /// </remarks>
+        public DateTimeFormatInfo DateTimeFormat { get; }
         
-#if PCL
-        /// <summary>
-        /// Gets the time separator.
-        /// </summary>
-        public string TimeSeparator => timeSeparator;
-
-        /// <summary>
-        /// Gets the date separator.
-        /// </summary>
-        public string DateSeparator => dateSeparator;
-#else
         /// <summary>
         /// Gets the time separator.
         /// </summary>
@@ -275,7 +301,7 @@ namespace NodaTime.Globalization
         /// Gets the date separator.
         /// </summary>
         public string DateSeparator => DateTimeFormat.DateSeparator;
-#endif
+
         /// <summary>
         /// Gets the AM designator.
         /// </summary>
@@ -292,7 +318,7 @@ namespace NodaTime.Globalization
         /// <param name="era">The era to find the names of.</param>
         /// <returns>A read-only list of names for the given era, or an empty list if
         /// the era is not known in this culture.</returns>
-        public IList<string> GetEraNames([NotNull] Era era)
+        public IList<string> GetEraNames(Era era)
         {
             Preconditions.CheckNotNull(era, nameof(era));
             return GetEraDescription(era).AllNames;
@@ -303,25 +329,13 @@ namespace NodaTime.Globalization
         /// </summary>
         /// <param name="era">The era to find the primary name of.</param>
         /// <returns>The primary name for the given era, or an empty string if the era name is not known.</returns>
-        public string GetEraPrimaryName([NotNull] Era era)
+        public string GetEraPrimaryName(Era era)
         {
             Preconditions.CheckNotNull(era, nameof(era));
             return GetEraDescription(era).PrimaryName;
         }
 
-        private EraDescription GetEraDescription(Era era)
-        {
-            lock (eraDescriptions)
-            {
-                EraDescription ret;
-                if (!eraDescriptions.TryGetValue(era, out ret))
-                {
-                    ret = EraDescription.ForEra(era, CultureInfo);
-                    eraDescriptions[era] = ret;
-                }
-                return ret;
-            }
-        }
+        private EraDescription GetEraDescription(Era era) => eraDescriptions.GetOrAdd(era, key => EraDescription.ForEra(key, CultureInfo));
 
         /// <summary>
         /// Gets the <see cref="NodaFormatInfo" /> object for the current thread.
@@ -371,7 +385,7 @@ namespace NodaTime.Globalization
         /// </remarks>
         /// <param name="cultureInfo">The culture info.</param>
         /// <returns>The <see cref="NodaFormatInfo" />. Will never be null.</returns>
-        internal static NodaFormatInfo GetFormatInfo([NotNull] CultureInfo cultureInfo)
+        internal static NodaFormatInfo GetFormatInfo(CultureInfo cultureInfo)
         {
             Preconditions.CheckNotNull(cultureInfo, nameof(cultureInfo));
             if (cultureInfo == CultureInfo.InvariantCulture)
@@ -388,23 +402,24 @@ namespace NodaTime.Globalization
 
         /// <summary>
         /// Gets the <see cref="NodaFormatInfo" /> for the given <see cref="IFormatProvider" />. If the
-        /// format provider is null or if it does not provide a <see cref="NodaFormatInfo" />
-        /// object then the format object for the current thread is returned.
+        /// format provider is null then the format object for the current thread is returned. If it's
+        /// a CultureInfo, that's used for everything. If it's a DateTimeFormatInfo, that's used for
+        /// format strings, day names etc but the invariant culture is used for text comparisons and
+        /// resource lookups. Otherwise, <see cref="ArgumentException"/> is thrown.
         /// </summary>
         /// <param name="provider">The <see cref="IFormatProvider" />.</param>
+        /// <exception cref="ArgumentException">The format provider cannot be used for Noda Time.</exception>
         /// <returns>The <see cref="NodaFormatInfo" />. Will never be null.</returns>
-        public static NodaFormatInfo GetInstance(IFormatProvider provider)
-        {
-            if (provider != null)
+        public static NodaFormatInfo GetInstance(IFormatProvider? provider) => provider switch
             {
-                var cultureInfo = provider as CultureInfo;
-                if (cultureInfo != null)
-                {
-                    return GetFormatInfo(cultureInfo);
-                }
-            }
-            return GetInstance(CultureInfo.CurrentCulture);
-        }
+                null => GetFormatInfo(CurrentInfo.CultureInfo),
+                CultureInfo cultureInfo => GetFormatInfo(cultureInfo),
+                // Note: no caching for this case. It's a corner case anyway... we could add a cache later
+                // if users notice a problem.
+                DateTimeFormatInfo dateTimeFormatInfo => new NodaFormatInfo(CultureInfo.InvariantCulture, dateTimeFormatInfo),
+                // TODO(nullable): File a Roslyn bug, as provider really won't be null here.
+                _ => throw new ArgumentException($"Cannot use provider of type {provider!.GetType().FullName} in Noda Time", nameof(provider))
+            };
 
         /// <summary>
         /// Returns a <see cref="System.String" /> that represents this instance.
@@ -430,14 +445,14 @@ namespace NodaTime.Globalization
                 string pipeDelimited = PatternResources.ResourceManager.GetString(era.ResourceIdentifier, cultureInfo);
                 string primaryName;
                 string[] allNames;
-                if (pipeDelimited == null)
+                if (pipeDelimited is null)
                 {
                     allNames = new string[0];
                     primaryName = "";
                 }
                 else
                 {
-                    string eraNameFromCulture = GetEraNameFromBcl(era, cultureInfo);
+                    string? eraNameFromCulture = GetEraNameFromBcl(era, cultureInfo);
                     if (eraNameFromCulture != null && !pipeDelimited.StartsWith(eraNameFromCulture + "|"))
                     {
                         pipeDelimited = eraNameFromCulture + "|" + pipeDelimited;
@@ -455,21 +470,13 @@ namespace NodaTime.Globalization
             /// it's correct. (The selection here seems small, but it covers most cases.) This isn't ideal, but it's better
             /// than nothing, and fixes an issue where non-English BCL cultures have "gg" in their patterns.
             /// </summary>
-            private static string GetEraNameFromBcl(Era era, CultureInfo culture)
+            private static string? GetEraNameFromBcl(Era era, CultureInfo culture)
             {
                 var calendar = culture.DateTimeFormat.Calendar;
-#if PCL
-                var calendarTypeName = calendar.GetType().FullName;
-                bool getEraFromCalendar =
-                    (era == Era.Common && calendarTypeName == "System.Globalization.GregorianCalendar") ||
-                    (era == Era.AnnoPersico && calendarTypeName == "System.Globalization.PersianCalendar") ||
-                    (era == Era.AnnoHegirae && (calendarTypeName == "System.Globalization.HijriCalendar" || calendarTypeName == "System.Globalization.UmAlQuraCalendar"));
-#else
                 bool getEraFromCalendar =
                     (era == Era.Common && calendar is GregorianCalendar) ||
                     (era == Era.AnnoPersico && calendar is PersianCalendar) ||
                     (era == Era.AnnoHegirae && (calendar is HijriCalendar || calendar is UmAlQuraCalendar));
-#endif
                 return getEraFromCalendar ? culture.DateTimeFormat.GetEraName(1) : null;
             }
         }

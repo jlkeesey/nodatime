@@ -31,14 +31,11 @@ namespace NodaTime.TzdbCompiler.Tzdb
     {
         private const int Version = 0;
 
-        private readonly Stream stream;
-
-        internal TzdbStreamWriter(Stream stream)
-        {
-            this.stream = stream;
-        }
-
-        public void Write(TzdbDatabase database, WindowsZones cldrWindowsZones)
+        public void Write(
+            TzdbDatabase database,
+            WindowsZones cldrWindowsZones,
+            IDictionary<string, string> additionalWindowsNameToIdMappings,
+            Stream stream)
         {
             FieldCollection fields = new FieldCollection();
 
@@ -70,8 +67,10 @@ namespace NodaTime.TzdbCompiler.Tzdb
 
             // Windows mappings
             cldrWindowsZones.Write(fields.AddField(TzdbStreamFieldId.CldrSupplementalWindowsZones, stringPool).Writer);
+            // Additional names from Windows Standard Name to canonical ID, used in Noda Time 1.x BclDateTimeZone, when we
+            // didn't have access to TimeZoneInfo.Id.
             fields.AddField(TzdbStreamFieldId.WindowsAdditionalStandardNameToIdMapping, stringPool).Writer.WriteDictionary
-                (PclSupport.StandardNameToIdMap.ToDictionary(pair => pair.Key, pair => cldrWindowsZones.PrimaryMapping[pair.Value]));
+                (additionalWindowsNameToIdMappings.ToDictionary(pair => pair.Key, pair => cldrWindowsZones.PrimaryMapping[pair.Value]));
 
             // Zone locations, if any.
             var zoneLocations = database.ZoneLocations;
@@ -107,8 +106,6 @@ namespace NodaTime.TzdbCompiler.Tzdb
             // Now write all the fields out, in the right order.
             new BinaryWriter(stream).Write(Version);
             fields.WriteTo(stream);
-            
-            stream.Dispose();
         }
 
         private static void WriteZone(DateTimeZone zone, IDateTimeZoneWriter writer)
@@ -147,8 +144,8 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// </summary>
         private static List<string> CreateOptimizedStringPool(
             IEnumerable<DateTimeZone> zones,
-            IEnumerable<TzdbZoneLocation> zoneLocations,
-            IEnumerable<TzdbZone1970Location> zone1970Locations,
+            IEnumerable<TzdbZoneLocation>? zoneLocations,
+            IEnumerable<TzdbZone1970Location>? zone1970Locations,
             WindowsZones cldrWindowsZones)
         {
             var optimizingWriter = new StringPoolOptimizingFakeWriter();
@@ -218,7 +215,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         {
             private readonly MemoryStream stream;
 
-            internal FieldData(TzdbStreamFieldId fieldId, IList<string> stringPool)
+            internal FieldData(TzdbStreamFieldId fieldId, IList<string>? stringPool)
             {
                 this.FieldId = fieldId;
                 this.stream = new MemoryStream();
@@ -242,7 +239,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         {
             private readonly List<FieldData> fields = new List<FieldData>();
 
-            internal FieldData AddField(TzdbStreamFieldId fieldNumber, IList<string> stringPool)
+            internal FieldData AddField(TzdbStreamFieldId fieldNumber, IList<string>? stringPool)
             {
                 FieldData ret = new FieldData(fieldNumber, stringPool);
                 fields.Add(ret);

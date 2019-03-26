@@ -19,12 +19,12 @@ namespace NodaTime.TimeZones
     internal sealed class PrecalculatedDateTimeZone : DateTimeZone
     {
         private readonly ZoneInterval[] periods;
-        private readonly IZoneIntervalMapWithMinMax tailZone;
+        private readonly IZoneIntervalMapWithMinMax? tailZone;
         /// <summary>
         /// The first instant covered by the tail zone, or Instant.AfterMaxValue if there's no tail zone.
         /// </summary>
         private readonly Instant tailZoneStart;
-        private readonly ZoneInterval firstTailZoneInterval;
+        private readonly ZoneInterval? firstTailZoneInterval;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PrecalculatedDateTimeZone"/> class.
@@ -34,12 +34,11 @@ namespace NodaTime.TimeZones
         /// <param name="tailZone">The tail zone - which can be any IZoneIntervalMap for normal operation,
         /// but must be a StandardDaylightAlternatingMap if the result is to be serialized.</param>
         [VisibleForTesting]
-        internal PrecalculatedDateTimeZone([NotNull] string id, [NotNull] ZoneInterval[] intervals, IZoneIntervalMapWithMinMax tailZone)
+        internal PrecalculatedDateTimeZone(string id, ZoneInterval[] intervals, IZoneIntervalMapWithMinMax? tailZone)
             : base(id, false,
                    ComputeOffset(intervals, tailZone, Offset.Min),
                    ComputeOffset(intervals, tailZone, Offset.Max))
         {
-            this.tailZone = tailZone;
             this.periods = intervals;
             this.tailZone = tailZone;
             this.tailZoneStart = intervals[intervals.Length - 1].RawEnd; // We want this to be AfterMaxValue for tail-less zones.
@@ -57,7 +56,7 @@ namespace NodaTime.TimeZones
         /// </summary>
         /// <remarks>This is only called from the constructors, but is internal to make it easier to test.</remarks>
         /// <exception cref="ArgumentException">The periods specified are invalid.</exception>
-        internal static void ValidatePeriods(ZoneInterval[] periods, IZoneIntervalMap tailZone)
+        internal static void ValidatePeriods(ZoneInterval[] periods, IZoneIntervalMap? tailZone)
         {
             Preconditions.CheckArgument(periods.Length > 0, nameof(periods), "No periods specified in precalculated time zone");
             Preconditions.CheckArgument(!periods[0].HasStart, nameof(periods), "Periods in precalculated time zone must start with the beginning of time");
@@ -82,7 +81,7 @@ namespace NodaTime.TimeZones
                 // Clamp the tail zone interval to start at the end of our final period, if necessary, so that the
                 // join is seamless.
                 ZoneInterval intervalFromTailZone = tailZone.GetZoneInterval(instant);
-                return intervalFromTailZone.RawStart < tailZoneStart ? firstTailZoneInterval : intervalFromTailZone;
+                return intervalFromTailZone.RawStart < tailZoneStart ? firstTailZoneInterval! : intervalFromTailZone;
             }
             
             int lower = 0; // Inclusive
@@ -110,29 +109,12 @@ namespace NodaTime.TimeZones
             throw new InvalidOperationException($"Instant {instant} did not exist in time zone {Id}");
         }
 
-        // TODO(2.0): Revisit this, given that it's useless at the moment.
-        /// <summary>
-        /// Returns true if this time zone is worth caching. Small time zones or time zones with
-        /// lots of quick changes do not work well with <see cref="CachedDateTimeZone"/>.
-        /// </summary>
-        /// <returns><c>true</c> if this instance is cachable; otherwise, <c>false</c>.</returns>
-        public bool IsCachable() =>
-            // TODO: Work out some decent rules for this. Previously we would only cache if the
-            // tail zone was non-null... which was *always* the case due to the use of NullDateTimeZone.
-            // We could potentially go back to returning tailZone != null - benchmarking required.
-            true;
-
-        public DateTimeZone MaybeCreateCachedZone()
-        {
-            return IsCachable() ? CachedDateTimeZone.ForZone(this) : this;
-        }
-
         #region I/O
         /// <summary>
         /// Writes the time zone to the specified writer.
         /// </summary>
         /// <param name="writer">The writer to write to.</param>
-        internal void Write([NotNull] IDateTimeZoneWriter writer)
+        internal void Write(IDateTimeZoneWriter writer)
         {
             Preconditions.CheckNotNull(writer, nameof(writer));
 
@@ -152,7 +134,7 @@ namespace NodaTime.TimeZones
             writer.WriteZoneIntervalTransition(previous, tailZoneStart);
             // We could just check whether we've got to the end of the stream, but this
             // feels slightly safer.
-            writer.WriteByte((byte) (tailZone == null ? 0 : 1));
+            writer.WriteByte((byte) (tailZone is null ? 0 : 1));
             if (tailZone != null)
             {
                 // This is the only kind of zone we support in the new format. Enforce that...
@@ -167,7 +149,7 @@ namespace NodaTime.TimeZones
         /// <param name="reader">The reader.</param>
         /// <param name="id">The id.</param>
         /// <returns>The time zone.</returns>
-        internal static DateTimeZone Read([Trusted] [NotNull] IDateTimeZoneReader reader, [Trusted] [NotNull] string id)
+        internal static DateTimeZone Read([Trusted] IDateTimeZoneReader reader, [Trusted] string id)
         {
             Preconditions.DebugCheckNotNull(reader, nameof(reader));
             Preconditions.DebugCheckNotNull(id, nameof(id));
@@ -197,8 +179,8 @@ namespace NodaTime.TimeZones
 
         // Reasonably simple way of computing the maximum/minimum offset
         // from either periods or transitions, with or without a tail zone.
-        private static Offset ComputeOffset([NotNull] ZoneInterval[] intervals,
-            IZoneIntervalMapWithMinMax tailZone,
+        private static Offset ComputeOffset(ZoneInterval[] intervals,
+            IZoneIntervalMapWithMinMax? tailZone,
             OffsetAggregator aggregator)
         {
             Preconditions.CheckNotNull(intervals, nameof(intervals));
@@ -217,44 +199,6 @@ namespace NodaTime.TimeZones
             }
             return ret;
         }
-        #endregion
-
-        protected override bool EqualsImpl(DateTimeZone zone)
-        {
-            PrecalculatedDateTimeZone otherZone = (PrecalculatedDateTimeZone)zone;
-
-            // Check the individual fields first...
-            if (Id != otherZone.Id ||
-                !Equals(tailZone, otherZone.tailZone) ||
-                tailZoneStart != otherZone.tailZoneStart ||
-                !Equals(firstTailZoneInterval, otherZone.firstTailZoneInterval))
-            {
-                return false;
-            }
-
-            // Now all the intervals
-            if (periods.Length != otherZone.periods.Length)
-            {
-                return false;
-            }
-            for (int i = 0; i < periods.Length; i++)
-            {
-                if (!periods[i].Equals(otherZone.periods[i]))
-                {
-                    return false;
-                }
-            }
-            return true;                        
-        }
-
-        public override int GetHashCode()
-        {
-            var hash = HashCodeHelper.Initialize().Hash(Id).Hash(tailZoneStart).Hash(firstTailZoneInterval).Hash(tailZone);
-            foreach (var period in periods)
-            {
-                hash = hash.Hash(period);
-            }
-            return hash.Value;
-        }
+        #endregion        
     }
 }

@@ -2,19 +2,19 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Runtime.Serialization;
-using System.Xml;
-using System.Xml.Schema;
-using System.Xml.Serialization;
 using JetBrains.Annotations;
 using NodaTime.Annotations;
 using NodaTime.Calendars;
 using NodaTime.Text;
 using NodaTime.TimeZones;
 using NodaTime.Utility;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Xml;
+using System.Xml.Schema;
+using System.Xml.Serialization;
 
 namespace NodaTime
 {
@@ -40,15 +40,9 @@ namespace NodaTime
     /// </para>
     /// </remarks>
     /// <threadsafety>This type is an immutable value type. See the thread safety section of the user guide for more information.</threadsafety>
-#if !PCL
-    [Serializable]
-#endif
-    public struct ZonedDateTime : IEquatable<ZonedDateTime>, IFormattable, IXmlSerializable
-#if !PCL
-        , ISerializable
-#endif
+    public readonly struct ZonedDateTime : IEquatable<ZonedDateTime>, IFormattable, IXmlSerializable
     {
-        [ReadWriteForEfficiency] private OffsetDateTime offsetDateTime;
+        private readonly OffsetDateTime offsetDateTime;
         private readonly DateTimeZone zone;
 
         /// <summary>
@@ -66,7 +60,7 @@ namespace NodaTime
         /// <param name="instant">The instant.</param>
         /// <param name="zone">The time zone.</param>
         /// <param name="calendar">The calendar system.</param>
-        public ZonedDateTime(Instant instant, [NotNull] DateTimeZone zone, [NotNull] CalendarSystem calendar)
+        public ZonedDateTime(Instant instant, DateTimeZone zone, CalendarSystem calendar)
         {
             this.zone = Preconditions.CheckNotNull(zone, nameof(zone));
             offsetDateTime = new OffsetDateTime(instant, zone.GetUtcOffset(instant), Preconditions.CheckNotNull(calendar, nameof(calendar)));
@@ -78,7 +72,7 @@ namespace NodaTime
         /// </summary>
         /// <param name="instant">The instant.</param>
         /// <param name="zone">The time zone.</param>
-        public ZonedDateTime(Instant instant, [NotNull] DateTimeZone zone)
+        public ZonedDateTime(Instant instant, DateTimeZone zone)
         {
             this.zone = Preconditions.CheckNotNull(zone, nameof(zone));
             offsetDateTime = new OffsetDateTime(instant, zone.GetUtcOffset(instant));
@@ -95,7 +89,7 @@ namespace NodaTime
         /// <param name="offset">The offset between UTC and local time at the desired instant.</param>
         /// <exception cref="ArgumentException"><paramref name="offset"/> is not a valid offset at the given
         /// local date and time.</exception>
-        public ZonedDateTime(LocalDateTime localDateTime, [NotNull] DateTimeZone zone, Offset offset)
+        public ZonedDateTime(LocalDateTime localDateTime, DateTimeZone zone, Offset offset)
         {
             this.zone = Preconditions.CheckNotNull(zone, nameof(zone));
             Instant candidateInstant = localDateTime.ToLocalInstant().Minus(offset);
@@ -104,7 +98,7 @@ namespace NodaTime
             if (correctOffset != offset)
             {
                 throw new ArgumentException("Offset " + offset + " is invalid for local date and time " + localDateTime
-                    + " in time zone " + zone.Id, "offset");
+                    + " in time zone " + zone.Id, nameof(offset));
 
             }
             offsetDateTime = new OffsetDateTime(localDateTime, offset);
@@ -185,23 +179,10 @@ namespace NodaTime
         public int Day => offsetDateTime.Day;
 
         /// <summary>
-        /// Gets the week day of this zoned date and time expressed as an <see cref="NodaTime.IsoDayOfWeek"/> value,
-        /// for calendars which use ISO days of the week.
+        /// Gets the week day of this zoned date and time expressed as an <see cref="NodaTime.IsoDayOfWeek"/> value.
         /// </summary>
-        /// <exception cref="InvalidOperationException">The underlying calendar doesn't use ISO days of the week.</exception>
-        /// <seealso cref="DayOfWeek"/>
         /// <value>The week day of this zoned date and time expressed as an <c>IsoDayOfWeek</c> value.</value>
-        public IsoDayOfWeek IsoDayOfWeek => offsetDateTime.IsoDayOfWeek;
-
-        /// <summary>
-        /// Gets the week day of this zoned date and time as a number.
-        /// </summary>
-        /// <remarks>
-        /// For calendars using ISO week days, this gives 1 for Monday to 7 for Sunday.
-        /// </remarks>
-        /// <value>The week day of this zoned date and time as a number.</value>
-        /// <seealso cref="IsoDayOfWeek"/>
-        public int DayOfWeek => offsetDateTime.DayOfWeek;
+        public IsoDayOfWeek DayOfWeek => offsetDateTime.DayOfWeek;
 
         /// <summary>
         /// Gets the hour of day of this zoned date and time, in the range 0 to 23 inclusive.
@@ -242,6 +223,10 @@ namespace NodaTime
         /// <summary>
         /// Gets the tick of this zoned date and time within the day, in the range 0 to 863,999,999,999 inclusive.
         /// </summary>
+        /// <remarks>
+        /// This is the TickOfDay portion of the contained <see cref="OffsetDateTime"/>.
+        /// On daylight saving time transition dates, it may not be the same as the number of ticks elapsed since the beginning of the day.
+        /// </remarks>
         /// <value>The tick of this zoned date and time within the day, in the range 0 to 863,999,999,999 inclusive.</value>
         public long TickOfDay => offsetDateTime.TickOfDay;
 
@@ -254,6 +239,10 @@ namespace NodaTime
         /// <summary>
         /// Gets the nanosecond of this zoned date and time within the day, in the range 0 to 86,399,999,999,999 inclusive.
         /// </summary>
+        /// <remarks>
+        /// This is the NanosecondOfDay portion of the contained <see cref="OffsetDateTime"/>.
+        /// On daylight saving time transition dates, it may not be the same as the number of nanoseconds elapsed since the beginning of the day.
+        /// </remarks>
         /// <value>The nanosecond of this zoned date and time within the day, in the range 0 to 86,399,999,999,999 inclusive.</value>
         public long NanosecondOfDay => offsetDateTime.NanosecondOfDay;
 
@@ -277,7 +266,7 @@ namespace NodaTime
         /// <param name="targetZone">The target time zone to convert to.</param>
         /// <returns>A new value in the target time zone.</returns>
         [Pure]
-        public ZonedDateTime WithZone([NotNull] DateTimeZone targetZone)
+        public ZonedDateTime WithZone(DateTimeZone targetZone)
         {
             Preconditions.CheckNotNull(targetZone, nameof(targetZone));
             return new ZonedDateTime(ToInstant(), targetZone, Calendar);
@@ -291,7 +280,7 @@ namespace NodaTime
         /// <param name="calendar">The calendar system to convert this zoned date and time to.</param>
         /// <returns>The converted ZonedDateTime.</returns>
         [Pure]
-        public ZonedDateTime WithCalendar([NotNull] CalendarSystem calendar)
+        public ZonedDateTime WithCalendar(CalendarSystem calendar)
         {
             return new ZonedDateTime(offsetDateTime.WithCalendar(calendar), zone);
         }
@@ -316,7 +305,7 @@ namespace NodaTime
         /// <param name="obj">Another object to compare to.</param> 
         /// <filterpriority>2</filterpriority>
         /// <returns>True if the specified value is a <see cref="ZonedDateTime"/> representing the same instant in the same time zone; false otherwise.</returns>
-        public override bool Equals(object obj) => obj is ZonedDateTime && Equals((ZonedDateTime)obj);
+        public override bool Equals(object? obj) => obj is ZonedDateTime other && Equals(other);
 
         /// <summary>
         /// Computes the hash code for this instance.
@@ -552,7 +541,7 @@ namespace NodaTime
         /// or null to use the current thread's culture to obtain a format provider.
         /// </param>
         /// <filterpriority>2</filterpriority>
-        public string ToString(string patternText, IFormatProvider formatProvider) =>
+        public string ToString(string? patternText, IFormatProvider? formatProvider) =>
             ZonedDateTimePattern.Patterns.BclSupport.Format(this, patternText, formatProvider);
         #endregion Formatting
 
@@ -561,11 +550,24 @@ namespace NodaTime
         /// UTC as this value.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// An offset does not convey as much information as a time zone; a <see cref="DateTimeOffset"/>
         /// represents an instant in time along with an associated local time, but it doesn't allow you
         /// to find out what the local time would be for another instant.
+        /// </para>
+        /// <para>
+        /// If the date and time is not on a tick boundary (the unit of granularity of DateTime) the value will be truncated
+        /// towards the start of time.
+        /// </para>
+        /// <para>
+        /// If the offset has a non-zero second component, this is truncated as <c>DateTimeOffset</c> has an offset
+        /// granularity of minutes.
+        /// </para>
         /// </remarks>
-        /// <returns>A <see cref="DateTimeOffset"/> representation of this value.</returns>
+        /// <exception cref="InvalidOperationException">The date/time is outside the range of <c>DateTimeOffset</c>,
+        /// or the offset is outside the range of +/-14 hours (the range supported by <c>DateTimeOffset</c>).</exception>
+        /// <returns>A <c>DateTimeOffset</c> with the same local date/time and offset as this. The <see cref="DateTime"/> part of
+        /// the result always has a "kind" of Unspecified.</returns>
         [Pure]
         public DateTimeOffset ToDateTimeOffset() => offsetDateTime.ToDateTimeOffset();
 
@@ -585,6 +587,13 @@ namespace NodaTime
         /// <see cref="DateTime.Kind"/> of <see cref="DateTimeKind.Utc"/> and represents the same instant of time as
         /// this value rather than the same local time.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// If the date and time is not on a tick boundary (the unit of granularity of DateTime) the value will be truncated
+        /// towards the start of time.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">The final date/time is outside the range of <c>DateTime</c>.</exception>
         /// <returns>A <see cref="DateTime"/> representation of this value with a "universal" kind, with the same
         /// instant of time as this value.</returns>
         [Pure]
@@ -596,10 +605,17 @@ namespace NodaTime
         /// this value rather than the same instant in time.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// <see cref="DateTimeKind.Unspecified"/> is slightly odd - it can be treated as UTC if you use <see cref="DateTime.ToLocalTime"/>
         /// or as system local time if you use <see cref="DateTime.ToUniversalTime"/>, but it's the only kind which allows
         /// you to construct a <see cref="DateTimeOffset"/> with an arbitrary offset.
+        /// </para>
+        /// <para>
+        /// If the date and time is not on a tick boundary (the unit of granularity of DateTime) the value will be truncated
+        /// towards the start of time.
+        /// </para>
         /// </remarks>
+        /// <exception cref="InvalidOperationException">The date/time is outside the range of <c>DateTime</c>.</exception>
         /// <returns>A <see cref="DateTime"/> representation of this value with an "unspecified" kind, with the same
         /// local date and time as this value.</returns>
         [Pure]
@@ -613,6 +629,20 @@ namespace NodaTime
         [Pure]
         public OffsetDateTime ToOffsetDateTime() => offsetDateTime;
 
+        /// <summary>
+        /// Deconstruct this <see cref="ZonedDateTime"/> into its components.
+        /// </summary>
+        /// <param name="localDateTime">The <see cref="LocalDateTime"/> component.</param>
+        /// <param name="dateTimeZone">The <see cref="DateTimeZone"/> component.</param>
+        /// <param name="offset">The <see cref="Offset"/> component.</param>
+        [Pure]
+        public void Deconstruct(out LocalDateTime localDateTime, out DateTimeZone dateTimeZone, out Offset offset)
+        {
+            localDateTime = LocalDateTime;
+            dateTimeZone = Zone;
+            offset = Offset;
+        }
+
         #region Comparers
         /// <summary>
         /// Base class for <see cref="ZonedDateTime"/> comparers.
@@ -624,7 +654,7 @@ namespace NodaTime
         [Immutable]
         public abstract class Comparer : IComparer<ZonedDateTime>, IEqualityComparer<ZonedDateTime>
         {
-            // TODO(2.0): A comparer which compares instants, but in a calendar-sensitive manner?
+            // TODO(feature): A comparer which compares instants, but in a calendar-sensitive manner?
 
             /// <summary>
             /// Gets a comparer which compares <see cref="ZonedDateTime"/> values by their local date/time, without reference to
@@ -754,13 +784,13 @@ namespace NodaTime
 
         #region XML serialization
         /// <inheritdoc />
-        XmlSchema IXmlSerializable.GetSchema() => null;
+        XmlSchema IXmlSerializable.GetSchema() => null!; // TODO(nullable): Return XmlSchema? when docfx works with that
 
         /// <inheritdoc />
-        void IXmlSerializable.ReadXml([NotNull] XmlReader reader)
+        void IXmlSerializable.ReadXml(XmlReader reader)
         {
             Preconditions.CheckNotNull(reader, nameof(reader));
-            var pattern = OffsetDateTimePattern.ExtendedIsoPattern;
+            var pattern = OffsetDateTimePattern.ExtendedIso;
             if (!reader.MoveToAttribute("zone"))
             {
                 throw new ArgumentException("No zone specified in XML for ZonedDateTime");
@@ -782,11 +812,11 @@ namespace NodaTime
                 ParseResult<ZonedDateTime>.InvalidOffset(text).GetValueOrThrow();
             }
             // Use the constructor which doesn't validate the offset, as we've already done that.
-            this = new ZonedDateTime(offsetDateTime, newZone);
+            Unsafe.AsRef(this) = new ZonedDateTime(offsetDateTime, newZone);
         }
 
         /// <inheritdoc />
-        void IXmlSerializable.WriteXml([NotNull] XmlWriter writer)
+        void IXmlSerializable.WriteXml(XmlWriter writer)
         {
             Preconditions.CheckNotNull(writer, nameof(writer));
             writer.WriteAttributeString("zone", Zone.Id);
@@ -794,49 +824,8 @@ namespace NodaTime
             {
                 writer.WriteAttributeString("calendar", Calendar.Id);
             }
-            writer.WriteString(OffsetDateTimePattern.ExtendedIsoPattern.Format(ToOffsetDateTime()));
+            writer.WriteString(OffsetDateTimePattern.ExtendedIso.Format(ToOffsetDateTime()));
         }
         #endregion
-
-#if !PCL
-        #region Binary serialization
-        private const string DaysSerializationName = "days";
-        private const string NanosecondOfDaySerializationName = "nanosecondOfDay";
-        private const string CalendarIdSerializationName = "calendar";
-        private const string OffsetMillisecondsSerializationName = "offsetMilliseconds";
-        private const string ZoneIdSerializationName = "zone";
-
-        /// <summary>
-        /// Private constructor only present for serialization.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to fetch data from.</param>
-        /// <param name="context">The source for this deserialization.</param>
-        private ZonedDateTime(SerializationInfo info, StreamingContext context)
-            // Note: this uses the constructor which explicitly validates that the offset is reasonable.
-            : this(new LocalDateTime(new LocalDate(info.GetInt32(DaysSerializationName),
-                                                   CalendarSystem.ForId(info.GetString(CalendarIdSerializationName))),
-                                     LocalTime.FromNanosecondsSinceMidnight(info.GetInt64(NanosecondOfDaySerializationName))),
-                   DateTimeZoneProviders.Serialization[info.GetString(ZoneIdSerializationName)],
-                   Offset.FromMilliseconds(info.GetInt32(OffsetMillisecondsSerializationName)))
-        {
-        }
-
-        /// <summary>
-        /// Implementation of <see cref="ISerializable.GetObjectData"/>.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to populate with data.</param>
-        /// <param name="context">The destination for this serialization.</param>
-        [System.Security.SecurityCritical]
-        void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
-        {
-            // FIXME(2.0): Revisit serialization
-            info.AddValue(DaysSerializationName, Date.DaysSinceEpoch);
-            info.AddValue(NanosecondOfDaySerializationName, TimeOfDay.NanosecondOfDay);
-            info.AddValue(CalendarIdSerializationName, Calendar.Id);
-            info.AddValue(OffsetMillisecondsSerializationName, Offset.Milliseconds);
-            info.AddValue(ZoneIdSerializationName, Zone.Id);
-        }
-        #endregion
-#endif
     }
 }

@@ -25,7 +25,8 @@ namespace NodaTime.Test
                 Minutes = 5,
                 Seconds = 6,
                 Milliseconds = 7,
-                Ticks = 8
+                Ticks = 8,
+                Nanoseconds = 9
             };
             Assert.AreEqual(0, builder[PeriodUnits.Years]);
             Assert.AreEqual(1, builder[PeriodUnits.Months]);
@@ -36,6 +37,7 @@ namespace NodaTime.Test
             Assert.AreEqual(6L, builder[PeriodUnits.Seconds]);
             Assert.AreEqual(7L, builder[PeriodUnits.Milliseconds]);
             Assert.AreEqual(8L, builder[PeriodUnits.Ticks]);
+            Assert.AreEqual(9L, builder[PeriodUnits.Nanoseconds]);
         }
 
         [Test]
@@ -143,7 +145,7 @@ namespace NodaTime.Test
             /// Use this property!
             /// </summary>
             [XmlIgnore]
-            public Period Period { get; set; }
+            public Period? Period { get; set; }
 
             /// <summary>
             /// Don't use this property! It's only present for the purposes of XML serialization.
@@ -151,24 +153,18 @@ namespace NodaTime.Test
             /// </summary>
             [XmlElement("period")]
             [EditorBrowsable(EditorBrowsableState.Never)]
-            public PeriodBuilder PeriodBuilder
+            public PeriodBuilder? PeriodBuilder
             {
-                get { return Period == null ? null : Period.ToBuilder(); }
-                set { Period = value == null ? null : value.Build(); }
+                get => Period?.ToBuilder();
+                set => Period = value?.Build();
             }
         }
 
         private class BuilderEqualityComparer : IEqualityComparer<PeriodBuilder>
         {
-            public bool Equals(PeriodBuilder x, PeriodBuilder y)
-            {
-                return x.Build().Equals(y.Build());
-            }
+            public bool Equals(PeriodBuilder x, PeriodBuilder y) => x.Build().Equals(y.Build());
 
-            public int GetHashCode(PeriodBuilder obj)
-            {
-                return obj.Build().GetHashCode();
-            }
+            public int GetHashCode(PeriodBuilder obj) => obj.Build().GetHashCode();
         }
 
         private static void Call(object ignored) {}

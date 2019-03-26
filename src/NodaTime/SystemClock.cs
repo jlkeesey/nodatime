@@ -4,6 +4,7 @@
 
 using System;
 using NodaTime.Annotations;
+using JetBrains.Annotations;
 
 namespace NodaTime
 {

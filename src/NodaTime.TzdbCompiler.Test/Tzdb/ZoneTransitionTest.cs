@@ -2,7 +2,6 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using NodaTime;
 using NodaTime.TzdbCompiler.Tzdb;
 using NUnit.Framework;
 using System;
@@ -14,7 +13,7 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
         [Test]
         public void Construct_NullName_Exception()
         {
-            Assert.Throws(typeof(ArgumentNullException), () => new ZoneTransition(NodaConstants.UnixEpoch, null, Offset.Zero, Offset.Zero));
+            Assert.Throws(typeof(ArgumentNullException), () => new ZoneTransition(NodaConstants.UnixEpoch, null!, Offset.Zero, Offset.Zero));
         }
 
         [Test]
@@ -29,10 +28,10 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
         }
 
         [Test]
-        public void IsTransitionFrom_null_true()
+        public void IsTransitionFrom_null_throws()
         {
             var value = new ZoneTransition(NodaConstants.UnixEpoch, "abc", Offset.Zero, Offset.Zero);
-            Assert.True(value.IsTransitionFrom(null));
+            Assert.Throws<ArgumentNullException>(() => value.IsTransitionFrom(null!));
         }
 
         [Test]

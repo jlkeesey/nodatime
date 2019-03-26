@@ -86,7 +86,15 @@ namespace NodaTime.Test.Calendars
             }
         }
 
-#if DEBUG && !PCL
+
+        [Test]
+        public void GetYearMonthDay_InvalidValueForCoverage()
+        {
+            var calculator = new UmAlQuraYearMonthDayCalculator();
+            Assert.Throws<ArgumentOutOfRangeException>(() => calculator.GetYearMonthDay(calculator.MinYear, 1000));
+        }
+
+#if DEBUG
         [Test, Explicit]
         public void GenerateData()
         {

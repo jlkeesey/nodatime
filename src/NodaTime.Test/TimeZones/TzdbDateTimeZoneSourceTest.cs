@@ -16,31 +16,6 @@ namespace NodaTime.Test.TimeZones
     {
         private static readonly List<TimeZoneInfo> SystemTimeZones = TimeZoneInfo.GetSystemTimeZones().ToList();
 
-        [Test]
-        [TestCase("UTC", "Etc/GMT")]
-        [TestCase("GMT Standard Time", "Europe/London")]
-        // Standard name differs from ID under Windows
-        [TestCase("Israel Standard Time", "Asia/Jerusalem")]
-        public void ZoneMapping(string bclId, string tzdbId)
-        {
-            try
-            {
-                var source = TzdbDateTimeZoneSource.Default;
-                var bclZone = TimeZoneInfo.FindSystemTimeZoneById(bclId);
-                Assert.AreEqual(tzdbId, source.MapTimeZoneId(bclZone));
-            }
-#if PCL
-            // See https://github.com/dotnet/corefx/issues/7552
-            catch (Exception)
-#else
-            catch (TimeZoneNotFoundException)
-#endif
-            {
-                // This may occur on Mono, for example.
-                Assert.Ignore("Test assumes existence of BCL zone with ID: " + bclId);
-            }
-        }
-
         /// <summary>
         /// Tests that we can load (and exercise) the binary Tzdb resource file distributed with Noda Time 1.1.0.
         /// This is effectively a black-box regression test that ensures that the stream format has not changed in a
@@ -105,7 +80,7 @@ namespace NodaTime.Test.TimeZones
         [Test]
         public void ForId_Null()
         {
-            Assert.Throws<ArgumentNullException>(() => TzdbDateTimeZoneSource.Default.ForId(null));
+            Assert.Throws<ArgumentNullException>(() => TzdbDateTimeZoneSource.Default.ForId(null!));
         }
 
         [Test]
@@ -224,16 +199,13 @@ namespace NodaTime.Test.TimeZones
             StringAssert.StartsWith("TZDB: " + source.TzdbVersion, source.VersionId);
         }
 
-        private static List<string> ReadLines(TextReader reader)
-        {
-            var ret = new List<string>();
-            string line;
-            while ((line = reader.ReadLine()) != null)
-            {
-                ret.Add(line);
-            }
-            return ret;
-        }
+        [Test]
+        public void ValidateDefault() => TzdbDateTimeZoneSource.Default.Validate();
+
+        // By retrieving this once, we can massively speed up GuessZoneIdByTransitionsUncached. We don't need to
+        // reload the time zones for each test, and CachedDateTimeZone will speed things up after that too.
+        private static readonly List<DateTimeZone> TzdbDefaultZonesForIdGuessZoneIdByTransitionsUncached =
+            TzdbDateTimeZoneSource.Default.CanonicalIdMap.Values.Select(TzdbDateTimeZoneSource.Default.ForId).ToList();
 
         // We should be able to use TestCaseSource to call TimeZoneInfo.GetSystemTimeZones directly,
         // but that appears to fail under Mono.
@@ -241,15 +213,22 @@ namespace NodaTime.Test.TimeZones
         [TestCaseSource(nameof(SystemTimeZones))]
         public void GuessZoneIdByTransitionsUncached(TimeZoneInfo bclZone)
         {
-            // As of April 21st 2016, the Windows time zone database hasn't caught up to
-            // 2016d which includes: "America/Caracas switches from -0430 to -04 on 2016-05-01 at 02:30"
-            // Still need to investigate Morocco...
-            if (bclZone.Id == "Venezuela Standard Time" || bclZone.Id == "Morocco Standard Time")
+            // As of May 4th 2018, the Windows time zone database on Jon's laptop has caught up with this,
+            // but the one on AppVeyor hasn't. Keep skipping it for now.
+            if (bclZone.Id == "Namibia Standard Time")
             {
                 return;
             }
 
-            string id = TzdbDateTimeZoneSource.Default.GuessZoneIdByTransitionsUncached(bclZone);
+            // As of May 4th 2018, the Windows time zone database hasn't caught up
+            // with the North Korea change in TZDB 2018e.
+            if (bclZone.Id == "North Korea Standard Time")
+            {
+                return;
+            }
+
+            string? id = TzdbDateTimeZoneSource.Default.GuessZoneIdByTransitionsUncached(bclZone,
+                TzdbDefaultZonesForIdGuessZoneIdByTransitionsUncached);
 
             // Unmappable zones may not be mapped, or may be mapped to something reasonably accurate.
             // We don't mind either way.
@@ -259,7 +238,7 @@ namespace NodaTime.Test.TimeZones
             }
 
             Assert.IsNotNull(id, $"Unable to guess time zone for {bclZone.Id}");
-            var tzdbZone = TzdbDateTimeZoneSource.Default.ForId(id);
+            var tzdbZone = TzdbDateTimeZoneSource.Default.ForId(id!);
 
             var thisYear = SystemClock.Instance.GetCurrentInstant().InUtc().Year;
             LocalDate? lastIncorrectDate = null;
@@ -295,6 +274,36 @@ namespace NodaTime.Test.TimeZones
                 bclZone.Id,
                 id,
                 lastIncorrectDate, lastIncorrectBclOffset, lastIncorrectTzdbOffset);
+        }
+
+        [Test]
+        public void LocalZoneIsNull()
+        {
+            // Use the existing system time zones, but just make TimeZoneInfo.Local return null.
+            using (TimeZoneInfoReplacer.Replace(null, TimeZoneInfo.GetSystemTimeZones().ToArray()))
+            {
+                // If we have no system time zone, we have no ID to map it to.
+                Assert.Null(TzdbDateTimeZoneSource.Default.GetSystemDefaultId());
+            }
+        }
+
+        [Test]
+        [TestCase("Pacific Standard Time", 0, "America/Los_Angeles", Description = "Windows ID")]
+        [TestCase("America/Los_Angeles", 0, "America/Los_Angeles", Description = "TZDB ID")]
+        // Both Pacific/Honolulu and Etc/GMT+10 match with the same score; we use Etc/GMT+10
+        // as it comes first lexically.
+        [TestCase("Lilo and Stitch", -10, "Etc/GMT+10", Description = "Guess by transitions")]
+        public void MapTimeZoneInfoId(string timeZoneInfoId, int standardUtc, string expectedId)
+        {
+            var zoneInfo = TimeZoneInfo.CreateCustomTimeZone(timeZoneInfoId, TimeSpan.FromHours(standardUtc),
+                "Ignored display name", "Standard name for " + timeZoneInfoId);
+            var mappedId = TzdbDateTimeZoneSource.Default.MapTimeZoneInfoId(zoneInfo);
+            Assert.AreEqual(expectedId, mappedId);
+
+            // Do it again, and expect to get the same result again.
+            // In the case of the "Lilo and Stitch" zone, this means hitting the cache rather than guessing
+            // via transitions again.
+            Assert.AreEqual(mappedId, TzdbDateTimeZoneSource.Default.MapTimeZoneInfoId(zoneInfo));
         }
     }
 }

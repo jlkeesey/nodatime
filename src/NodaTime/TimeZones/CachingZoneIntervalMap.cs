@@ -13,26 +13,15 @@ namespace NodaTime.TimeZones
     /// </summary>
     internal static class CachingZoneIntervalMap
     {
-        /// <summary>
-        /// The type of cache to build.
-        /// </summary>
-        internal enum CacheType
-        {
-            Hashtable
-        }
+        // Currently the only implementation is HashArrayCache. This container class is mostly for historical
+        // reasons; it's not really necessary but it does no harm.
 
         /// <summary>
         /// Returns a caching map for the given input map.
         /// </summary>
-        internal static IZoneIntervalMap CacheMap([NotNull] IZoneIntervalMap map, CacheType type)
+        internal static IZoneIntervalMap CacheMap(IZoneIntervalMap map)
         {
-            switch (type)
-            {
-                case CacheType.Hashtable:
-                    return new HashArrayCache(map);
-                default:
-                    throw new ArgumentException("The type parameter is invalid", "type");
-            }
+            return new HashArrayCache(map);
         }
 
         #region Nested type: HashArrayCache
@@ -69,7 +58,7 @@ namespace NodaTime.TimeZones
             private readonly HashCacheNode[] instantCache;
             private readonly IZoneIntervalMap map;
 
-            internal HashArrayCache([NotNull] IZoneIntervalMap map)
+            internal HashArrayCache(IZoneIntervalMap map)
             {
                 this.map = Preconditions.CheckNotNull(map, nameof(map));
                 instantCache = new HashCacheNode[CacheSize];
@@ -86,7 +75,7 @@ namespace NodaTime.TimeZones
                 int period = instant.DaysSinceEpoch >> PeriodShift;
                 int index = period & CachePeriodMask;
                 var node = instantCache[index];
-                if (node == null || node.Period != period)
+                if (node is null || node.Period != period)
                 {
                     node = HashCacheNode.CreateNode(period, map);
                     instantCache[index] = node;
@@ -111,7 +100,7 @@ namespace NodaTime.TimeZones
 
                 internal int Period { get; }
 
-                internal HashCacheNode Previous { get; }
+                internal HashCacheNode? Previous { get; }
 
                 /// <summary>
                 /// Creates a hash table node with all the information for this period.
@@ -149,7 +138,7 @@ namespace NodaTime.TimeZones
                 /// <param name="interval">The zone interval.</param>
                 /// <param name="period"></param>
                 /// <param name="previous">The previous <see cref="HashCacheNode"/> node.</param>
-                private HashCacheNode(ZoneInterval interval, int period, HashCacheNode previous)
+                private HashCacheNode(ZoneInterval interval, int period, HashCacheNode? previous)
                 {
                     this.Period = period;
                     this.Interval = interval;

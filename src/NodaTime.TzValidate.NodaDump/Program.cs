@@ -4,6 +4,7 @@
 
 using CommandLine;
 using NodaTime.TimeZones;
+using NodaTime.Tools.Common;
 using NodaTime.TzdbCompiler.Tzdb;
 using System;
 using System.IO;
@@ -22,16 +23,17 @@ namespace NodaTime.TzValidate.NodaDump
         private static int Main(string[] args)
         {
             Options options = new Options();
-            ICommandLineParser parser = new CommandLineParser(new CommandLineParserSettings(Console.Error) { MutuallyExclusive = true });
+            ICommandLineParser parser = new CommandLineParser(new CommandLineParserSettings(Console.Error));
             if (!parser.ParseArguments(args, options))
             {
                 return 1;
             }
+            // Not null after we've parsed the arguments.
             TzdbDateTimeZoneSource source = LoadSource(options.Source);
             var dumper = new ZoneDumper(source, options);
             try
             {
-                using (var writer = options.OutputFile == null ? Console.Out : File.CreateText(options.OutputFile))
+                using (var writer = options.OutputFile is null ? Console.Out : File.CreateText(options.OutputFile))
                 {
                     dumper.Dump(writer);
                 }
@@ -45,15 +47,15 @@ namespace NodaTime.TzValidate.NodaDump
             return 0;
         }        
 
-        private static TzdbDateTimeZoneSource LoadSource(string source)
+        private static TzdbDateTimeZoneSource LoadSource(string? source)
         {
-            if (source == null)
+            if (source is null)
             {
                 return TzdbDateTimeZoneSource.Default;
             }
             if (source.EndsWith(".nzd"))
             {
-                var data = LoadFileOrUrl(source);
+                var data = FileUtility.LoadFileOrUrl(source);
                 return TzdbDateTimeZoneSource.FromStream(new MemoryStream(data));
             }
             else
@@ -62,20 +64,6 @@ namespace NodaTime.TzValidate.NodaDump
                 var database = compiler.Compile(source);
                 return database.ToTzdbDateTimeZoneSource();
             }
-        }
-
-        private static byte[] LoadFileOrUrl(string source)
-        {
-            if (source.StartsWith("http://") || source.StartsWith("https://") || source.StartsWith("ftp://"))
-            {
-                using (var client = new HttpClient())
-                {
-                    // I know using .Result is nasty, but we're in a console app, and nothing is
-                    // going to deadlock...
-                    return client.GetAsync(source).Result.EnsureSuccessStatusCode().Content.ReadAsByteArrayAsync().Result;
-                }
-            }
-            return File.ReadAllBytes(source);
         }
     }
 }

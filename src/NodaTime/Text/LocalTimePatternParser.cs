@@ -4,7 +4,6 @@
 
 using System.Collections.Generic;
 using NodaTime.Globalization;
-using NodaTime.Properties;
 using NodaTime.Text.Patterns;
 
 namespace NodaTime.Text
@@ -51,17 +50,18 @@ namespace NodaTime.Text
             // Nullity check is performed in LocalTimePattern.
             if (patternText.Length == 0)
             {
-                throw new InvalidPatternException(Messages.Parse_FormatStringEmpty);
+                throw new InvalidPatternException(TextErrorMessages.FormatStringEmpty);
             }
 
             if (patternText.Length == 1)
             {
-                char patternCharacter = patternText[0];
-                patternText = ExpandStandardFormatPattern(patternCharacter, formatInfo);
-                if (patternText == null)
+                patternText = patternText[0] switch
                 {
-                    throw new InvalidPatternException(Messages.Parse_UnknownStandardFormat, patternCharacter, typeof(LocalTime));
-                }
+                    't' => formatInfo.DateTimeFormat.ShortTimePattern,
+                    'T' => formatInfo.DateTimeFormat.LongTimePattern,
+                    'r' => "HH:mm:ss.FFFFFFFFF",
+                    _ => throw new InvalidPatternException(TextErrorMessages.UnknownStandardFormat, patternText, typeof(LocalTime))
+                };
             }
 
             var patternBuilder = new SteppedPatternBuilder<LocalTime, LocalTimeParseBucket>(formatInfo,
@@ -69,22 +69,6 @@ namespace NodaTime.Text
             patternBuilder.ParseCustomPattern(patternText, PatternCharacterHandlers);
             patternBuilder.ValidateUsedFields();
             return patternBuilder.Build(templateValue);
-        }
-
-        private string ExpandStandardFormatPattern(char patternCharacter, NodaFormatInfo formatInfo)
-        {
-            switch (patternCharacter)
-            {
-                case 't':
-                    return formatInfo.DateTimeFormat.ShortTimePattern;
-                case 'T':
-                    return formatInfo.DateTimeFormat.LongTimePattern;
-                case 'r':
-                    return "HH:mm:ss.FFFFFFFFF";
-                default:
-                    // Will be turned into an exception.
-                    return null;
-            }
         }
 
         /// <summary>
@@ -144,8 +128,7 @@ namespace NodaTime.Text
                 {
                     AmPm = TemplateValue.Hour / 12;
                 }
-                int hour;
-                ParseResult<LocalTime> failure = DetermineHour(usedFields, text, out hour);
+                ParseResult<LocalTime>? failure = DetermineHour(usedFields, text, out int hour);
                 if (failure != null)
                 {
                     return failure;
@@ -156,7 +139,7 @@ namespace NodaTime.Text
                 return ParseResult<LocalTime>.ForValue(LocalTime.FromHourMinuteSecondNanosecond(hour, minutes, seconds, fraction));
             }
 
-            private ParseResult<LocalTime> DetermineHour(PatternFields usedFields, string text, out int hour)
+            private ParseResult<LocalTime>? DetermineHour(PatternFields usedFields, string text, out int hour)
             {
                 hour = 0;
                 if (usedFields.HasAny(PatternFields.Hours24))

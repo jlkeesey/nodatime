@@ -17,8 +17,7 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
         [Test]
         public void Tokenize_nullArgument_Exception()
         {
-            string line = null;
-            Assert.Throws(typeof(ArgumentNullException), () => Tokens.Tokenize(line));
+            Assert.Throws(typeof(ArgumentNullException), () => Tokens.Tokenize(null!));
         }
 
         [Test]
@@ -42,7 +41,7 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
             const string text = "0:09:21";
             var offset = ParserHelper.ParseOffset(text);
             Duration duration = Duration.FromMinutes(9) + Duration.FromSeconds(21);
-            Assert.AreEqual(Offset.FromTicks(duration.Ticks), offset);
+            Assert.AreEqual(Offset.FromTicks(duration.BclCompatibleTicks), offset);
         }
 
         [Test]
@@ -52,7 +51,7 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
             const string text = "-0:06:04";
             var offset = ParserHelper.ParseOffset(text);
             Duration duration = Duration.FromMinutes(6) + Duration.FromSeconds(4);
-            Assert.AreEqual(Offset.FromTicks(-duration.Ticks), offset);
+            Assert.AreEqual(Offset.FromTicks(-duration.BclCompatibleTicks), offset);
         }
 
         private static void AssertTokensEqual(IList<string> expectedTokens, Tokens tokens)
@@ -61,7 +60,7 @@ namespace NodaTime.TzdbCompiler.Test.Tzdb
             {
                 Assert.True(tokens.HasNextToken, "Not enough items in enumeration");
                 var actual = tokens.NextToken(i.ToString());
-                if (actual == null)
+                if (actual is null)
                 {
                     Assert.Fail("The enumeration item at index [" + i + "] is null");
                 }

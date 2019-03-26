@@ -7,7 +7,6 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Text.RegularExpressions;
 using System.Net.Http;
 
@@ -33,7 +32,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
 
         private static readonly Regex VersionRegex = new Regex(@"\d{2,4}[a-z]");
 
-        private readonly TextWriter log;
+        private readonly TextWriter? log;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TzdbZoneInfoCompiler" /> class
@@ -45,7 +44,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// Initializes a new instance of the <see cref="TzdbZoneInfoCompiler" /> class
         /// logging to the given text writer, which may be null.
         /// </summary>
-        public TzdbZoneInfoCompiler(TextWriter log)
+        public TzdbZoneInfoCompiler(TextWriter? log)
         {
             this.log = log;
         }
@@ -146,7 +145,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
             {
                 foreach (var line in source.ReadLines(Makefile))
                 {
-                    if (line.StartsWith("VERSION="))
+                    if (Regex.IsMatch(line, @"VERSION=\d{4}.*"))
                     {
                         var version = line.Substring(8).Trim();
                         log?.WriteLine($"Inferred version {version} from {Makefile}");

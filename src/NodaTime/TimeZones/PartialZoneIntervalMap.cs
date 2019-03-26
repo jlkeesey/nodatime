@@ -29,7 +29,7 @@ namespace NodaTime.TimeZones
         internal PartialZoneIntervalMap(Instant start, Instant end, IZoneIntervalMap map)
         {
             // Allowing empty maps makes life simpler.
-            // TODO: Does it really? It's a pain in some places...
+            // TODO(misc): Does it really? It's a pain in some places...
             Preconditions.DebugCheckArgument(start <= end, nameof(end),
                 "Invalid start/end combination: {0} - {1}", start, end);
             this.Start = start;
@@ -99,16 +99,16 @@ namespace NodaTime.TimeZones
         internal static IZoneIntervalMap ConvertToFullMap(IEnumerable<PartialZoneIntervalMap> maps)
         {
             var coalescedMaps = new List<PartialZoneIntervalMap>();
-            PartialZoneIntervalMap current = null;
+            PartialZoneIntervalMap? current = null;
             foreach (var next in maps)
             {
-                if (current == null)
+                if (current is null)
                 {
                     current = next;
-                    Preconditions.DebugCheckArgument(current.Start == Instant.BeforeMinValue, "maps", "First partial map must start at the beginning of time");
+                    Preconditions.DebugCheckArgument(current.Start == Instant.BeforeMinValue, nameof(maps), "First partial map must start at the beginning of time");
                     continue;
                 }
-                Preconditions.DebugCheckArgument(current.End == next.Start, "maps", "Maps must abut");
+                Preconditions.DebugCheckArgument(current.End == next.Start, nameof(maps), "Maps must abut");
 
                 if (next.Start == next.End)
                 {
@@ -159,11 +159,11 @@ namespace NodaTime.TimeZones
                     }
                 }
             }
-            Preconditions.DebugCheckArgument(current != null, "maps", "Collection of maps must not be empty");
-            Preconditions.DebugCheckArgument(current.End == Instant.AfterMaxValue, "maps", "Collection of maps must end at the end of time");
+            Preconditions.DebugCheckArgument(current != null, nameof(maps), "Collection of maps must not be empty");
+            Preconditions.DebugCheckArgument(current!.End == Instant.AfterMaxValue, nameof(maps), "Collection of maps must end at the end of time");
 
             // We're left with a map extending to the end of time, which couldn't have been coalesced with its predecessors.
-            coalescedMaps.Add(current);
+            coalescedMaps.Add(current!);
             return new CombinedPartialZoneIntervalMap(coalescedMaps.ToArray());
         }
 

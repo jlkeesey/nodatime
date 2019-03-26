@@ -2,11 +2,11 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
+using NodaTime.TimeZones;
+using NodaTime.Utility;
 using System;
 using System.Globalization;
 using System.IO;
-using NodaTime.TimeZones;
-using NodaTime.Utility;
 
 namespace NodaTime.TzdbCompiler.Tzdb
 {
@@ -72,7 +72,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// </summary>
         /// <param name="tokens">The tokens.</param>
         /// <param name="name">The name of the expected value, for use in the exception if no value is available.</param>
-        private string NextOptional(Tokens tokens, string name) => ParserHelper.ParseOptional(NextString(tokens, name));
+        private string? NextOptional(Tokens tokens, string name) => ParserHelper.ParseOptional(NextString(tokens, name));
 
         /// <summary>
         /// Returns the next string from the token stream.
@@ -96,8 +96,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         private static int NextYear(Tokens tokens, int defaultValue)
         {
             int result = defaultValue;
-            string text;
-            if (tokens.TryNextToken(out text))
+            if (tokens.TryNextToken(out string text))
             {
                 result = ParserHelper.ParseYear(text, defaultValue);
             }
@@ -123,7 +122,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <param name="database">The database to fill.</param>
         internal void Parse(TextReader reader, TzdbDatabase database)
         {
-            string currentZone = null;
+            string? currentZone = null;
             foreach (var line in reader.ReadLines())
             {
                 currentZone = ParseLine(line, currentZone, database);
@@ -208,6 +207,13 @@ namespace NodaTime.TzdbCompiler.Tzdb
                             timeOfDay = LocalTime.Midnight;
                             addDay = true;
                         }
+                        // As of TZDB 2018f, Japan's fallback transitions occur at 25:00. We can't
+                        // represent this entirely accurately, but this is as close as we can approximate it.
+                        else if (atTime == "25:00")
+                        {
+                            timeOfDay = new LocalTime(1, 0);
+                            addDay = true;
+                        }
                         else
                         {
                             timeOfDay = ParserHelper.ParseTime(atTime);
@@ -224,7 +230,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <param name="text">The text.</param>
         private static int ParseDayOfWeek(string text)
         {
-            Preconditions.CheckArgument(!string.IsNullOrEmpty(text), "text", "Value must not be empty or null");
+            Preconditions.CheckArgument(!string.IsNullOrEmpty(text), nameof(text), "Value must not be empty or null");
             int index = Array.IndexOf(DaysOfWeek, text, 1);
             if (index == -1)
             {
@@ -261,9 +267,10 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// </para>
         /// </remarks>
         /// <param name="line">The line to parse.</param>
+        /// <param name="previousZone">The previous zone ID, or null if we don't have one.</param>
         /// <param name="database">The database to fill.</param>
         /// <return>The zone name just parsed, if any - so that it can be passed into the next call.</return>
-        private string ParseLine(string line, string previousZone, TzdbDatabase database)
+        private string? ParseLine(string line, string? previousZone, TzdbDatabase database)
         {
             // Trim end-of-line comments
             int index = line.IndexOf("#", StringComparison.Ordinal);
@@ -297,7 +304,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
                 default:
                     if (string.IsNullOrEmpty(keyword))
                     {
-                        if (previousZone == null)
+                        if (previousZone is null)
                         {
                             throw new InvalidDataException("Zone continuation provided with no previous zone line");
                         }
@@ -307,7 +314,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
                     else
                     {
                         throw new InvalidDataException($"Unexpected zone database keyword: {keyword}");
-                    }                    
+                    }
             }
         }
 
@@ -331,7 +338,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <exception cref="InvalidDataException">The month name can't be parsed</exception>
         internal static int ParseMonth(String text)
         {
-            Preconditions.CheckArgument(!string.IsNullOrEmpty(text), "text", "Value must not be empty or null");
+            Preconditions.CheckArgument(!string.IsNullOrEmpty(text), nameof(text), "Value must not be empty or null");
             int index = Array.IndexOf(ShortMonths, text, 1);
             if (index == -1)
             {
@@ -362,7 +369,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
             // zic behaviour in the only cases of this that we've seen, e.g. the systemv rules
             // prior to 2001a.
             if (fromYear == int.MinValue)
-            { 
+            {
                 fromYear = 1900;
             }
 
@@ -396,7 +403,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
             var rules = NextOptional(tokens, "Rules");
             var format = NextString(tokens, "Format");
             int year = NextYear(tokens, Int32.MaxValue);
-            
+
             if (tokens.HasNextToken)
             {
                 var until = ParseDateTimeOfYear(tokens, false);

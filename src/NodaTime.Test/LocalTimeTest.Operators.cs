@@ -3,7 +3,6 @@
 // as found in the LICENSE.txt file.
 
 using System;
-using System.IO;
 using NUnit.Framework;
 
 namespace NodaTime.Test
@@ -33,7 +32,7 @@ namespace NodaTime.Test
         {
             LocalTime date = new LocalTime(12, 0);
             // Call to ToString just to make it a valid statement
-            Assert.Throws<ArgumentNullException>(() => (date + (Period)null).ToString());
+            Assert.Throws<ArgumentNullException>(() => (date + (Period)null!).ToString());
         }
 
         [Test]
@@ -59,7 +58,7 @@ namespace NodaTime.Test
         {
             LocalTime date = new LocalTime(12, 0);
             // Call to ToString just to make it a valid statement
-            Assert.Throws<ArgumentNullException>(() => (date - (Period)null).ToString());
+            Assert.Throws<ArgumentNullException>(() => (date - (Period)null!).ToString());
         }
 
         [Test]
@@ -184,9 +183,8 @@ namespace NodaTime.Test
         public void IComparableCompareTo_Null_Positive()
         {
             var instance = new LocalTime(10, 30, 45);
-            var i_instance = (IComparable)instance;
-            object arg = null;
-            var result = i_instance.CompareTo(arg);
+            var comparable = (IComparable)instance;
+            var result = comparable.CompareTo(null);
             Assert.That(result, Is.GreaterThan(0));
         }
 

@@ -34,9 +34,6 @@ namespace NodaTime
     /// <threadsafety>Any public static members of this type are thread safe. Any instance members are not guaranteed to be thread safe.
     /// See the thread safety section of the user guide for more information.
     /// </threadsafety>
-#if !PCL
-    [Serializable]
-#endif
     [Mutable] // Exception itself is mutable
     public sealed class SkippedTimeException : ArgumentOutOfRangeException
     {
@@ -61,7 +58,7 @@ namespace NodaTime
         /// </remarks>
         /// <param name="localDateTime">The local date/time which is skipped in the specified time zone.</param>
         /// <param name="zone">The time zone in which the local date/time does not exist.</param>
-        public SkippedTimeException(LocalDateTime localDateTime, [NotNull] DateTimeZone zone)
+        public SkippedTimeException(LocalDateTime localDateTime, DateTimeZone zone)
             : base("Local time " + localDateTime + " is invalid in time zone " + Preconditions.CheckNotNull(zone, nameof(zone)).Id)
         {
             this.LocalDateTime = localDateTime;

@@ -2,11 +2,11 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System.Collections.Generic;
 using JetBrains.Annotations;
 using NodaTime.Utility;
-using System.Text;
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace NodaTime.TzdbCompiler.Tzdb
 {
@@ -63,8 +63,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <exception cref="MissingTokenException">Thrown if there is no next token.</exception>
         public string NextToken(string name)
         {
-            string result;
-            if (TryNextToken(out result))
+            if (TryNextToken(out string result))
             {
                 return result;
             }
@@ -77,9 +76,9 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// </summary>
         /// <param name="text">The text to break into words.</param>
         /// <returns>The tokenized text.</returns>
-        public static Tokens Tokenize([NotNull] string text)
+        public static Tokens Tokenize(string text)
         {
-            Preconditions.CheckNotNull(text, "text");
+            Preconditions.CheckNotNull(text, nameof(text));
             text = text.TrimEnd();
             if (text == "")
             {

@@ -2,7 +2,6 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
 using NodaTime.TimeZones;
 using NodaTime.Utility;
 using JetBrains.Annotations;
@@ -32,7 +31,6 @@ namespace NodaTime
             internal static readonly DateTimeZoneCache TzdbImpl = new DateTimeZoneCache(TzdbDateTimeZoneSource.Default);
         }
 
-#if !PCL
         // As per TzDbHolder above, this exists to defer construction of a BCL provider until needed.
         // While BclDateTimeZoneSource itself is lightweight, DateTimeZoneCache still does a non-trivial amount of work
         // on initialisation.
@@ -44,14 +42,13 @@ namespace NodaTime
 
         /// <summary>
         /// Gets a time zone provider which uses a <see cref="BclDateTimeZoneSource"/>.
-        /// This property is not available on the PCL build of Noda Time.
+        /// This property is not available on the .NET Standard 1.3 build of Noda Time.
         /// </summary>
         /// <remarks>
         /// <para>See note on <see cref="BclDateTimeZone"/> for details of some incompatibilities with the BCL.</para>
         /// </remarks>
         /// <value>A time zone provider which uses a <c>BclDateTimeZoneSource</c>.</value>
         public static IDateTimeZoneProvider Bcl => BclHolder.BclImpl;
-#endif
 
         private static readonly object SerializationProviderLock = new object();
         private static IDateTimeZoneProvider serializationProvider;
@@ -68,7 +65,7 @@ namespace NodaTime
         /// </remarks>
         /// <value>The <c>IDateTimeZoneProvider</c> to use to interpret a time zone ID read as part of
         /// XML or binary serialization.</value>
-        [NotNull] public static IDateTimeZoneProvider Serialization
+        public static IDateTimeZoneProvider Serialization
         {
             get
             {

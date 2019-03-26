@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using NodaTime.Globalization;
-using NodaTime.Properties;
 using NodaTime.Text.Patterns;
 using NodaTime.Utility;
 using JetBrains.Annotations;
@@ -42,24 +41,22 @@ namespace NodaTime.Text
 
         // Note: public to implement the interface. It does no harm, and it's simpler than using explicit
         // interface implementation.
-        public IPattern<Duration> ParsePattern([NotNull] string patternText, NodaFormatInfo formatInfo)
+        public IPattern<Duration> ParsePattern(string patternText, NodaFormatInfo formatInfo)
         {
             Preconditions.CheckNotNull(patternText, nameof(patternText));
             if (patternText.Length == 0)
             {
-                throw new InvalidPatternException(Messages.Parse_FormatStringEmpty);
+                throw new InvalidPatternException(TextErrorMessages.FormatStringEmpty);
             }
 
-            // The sole standard pattern...
             if (patternText.Length == 1)
             {
-                switch (patternText[0])
+                return patternText[0] switch
                 {
-                    case 'o':
-                        return DurationPattern.Patterns.RoundtripPatternImpl;
-                    default:
-                        throw new InvalidPatternException(Messages.Parse_UnknownStandardFormat, patternText[0], typeof(Duration));
-                }
+                    'o' => DurationPattern.Patterns.RoundtripPatternImpl,
+                    'j' => DurationPattern.Patterns.JsonRoundtripPatternImpl,
+                    _ => throw new InvalidPatternException(TextErrorMessages.UnknownStandardFormat, patternText, typeof(Duration))
+                };
             }
 
             var patternBuilder = new SteppedPatternBuilder<Duration, DurationParseBucket>(formatInfo,
@@ -84,7 +81,7 @@ namespace NodaTime.Text
                 // AddField would throw an inappropriate exception here, so handle it specially.
                 if ((builder.UsedFields & PatternFields.TotalDuration) != 0)
                 {
-                    throw new InvalidPatternException(Messages.Parse_MultipleCapitalDurationFields);
+                    throw new InvalidPatternException(TextErrorMessages.MultipleCapitalDurationFields);
                 }
                 builder.AddField(field, pattern.Current);
                 builder.AddField(PatternFields.TotalDuration, pattern.Current);
@@ -101,7 +98,7 @@ namespace NodaTime.Text
                 // AddField would throw an inappropriate exception here, so handle it specially.
                 if ((builder.UsedFields & PatternFields.TotalDuration) != 0)
                 {
-                    throw new InvalidPatternException(Messages.Parse_MultipleCapitalDurationFields);
+                    throw new InvalidPatternException(TextErrorMessages.MultipleCapitalDurationFields);
                 }
                 builder.AddField(PatternFields.DayOfMonth, pattern.Current);
                 builder.AddField(PatternFields.TotalDuration, pattern.Current);
@@ -177,7 +174,7 @@ namespace NodaTime.Text
         {
             private static readonly BigInteger BigIntegerNanosecondsPerDay = NanosecondsPerDay;
 
-            // TODO: We might want to try to optimize this, but it's *much* simpler to get working reliably this way
+            // TODO(optimization): We might want to try to optimize this, but it's *much* simpler to get working reliably this way
             // than to manipulate a real Duration.
             internal bool IsNegative { get; set; }
             private BigInteger currentNanos;
@@ -208,8 +205,7 @@ namespace NodaTime.Text
                 }
                 if (currentNanos < Duration.MinNanoseconds || currentNanos > Duration.MaxNanoseconds)
                 {
-                    // TODO: Work out whether this is really the best message. (Created a new one...)
-                    return ParseResult<Duration>.ForInvalidValuePostParse(text, Messages.Parse_OverallValueOutOfRange,
+                    return ParseResult<Duration>.ForInvalidValuePostParse(text, TextErrorMessages.OverallValueOutOfRange,
                         typeof(Duration));
                 }
                 return ParseResult<Duration>.ForValue(Duration.FromNanoseconds(currentNanos));

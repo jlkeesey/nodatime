@@ -2,18 +2,18 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using static NodaTime.NodaConstants;
-
-using System;
-using System.Globalization;
-using System.Runtime.Serialization;
-using System.Xml;
-using System.Xml.Schema;
-using System.Xml.Serialization;
 using JetBrains.Annotations;
 using NodaTime.Annotations;
 using NodaTime.Text;
 using NodaTime.Utility;
+using System;
+using System.ComponentModel;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Xml;
+using System.Xml.Schema;
+using System.Xml.Serialization;
+using static NodaTime.NodaConstants;
 
 namespace NodaTime
 {
@@ -35,13 +35,8 @@ namespace NodaTime
     /// but only in very rare historical cases (or fictional ones).</para>
     /// </remarks>
     /// <threadsafety>This type is an immutable value type. See the thread safety section of the user guide for more information.</threadsafety>
-#if !PCL
-    [Serializable]
-#endif
-    public struct Offset : IEquatable<Offset>, IComparable<Offset>, IFormattable, IComparable, IXmlSerializable
-#if !PCL
-        , ISerializable
-#endif
+    [TypeConverter(typeof(OffsetTypeConverter))]
+    public readonly struct Offset : IEquatable<Offset>, IComparable<Offset>, IFormattable, IComparable, IXmlSerializable
     {
         /// <summary>
         /// An offset of zero seconds - effectively the permanent offset for UTC.
@@ -59,8 +54,8 @@ namespace NodaTime
 
         private const int MinHours = -18;
         private const int MaxHours = 18;
-        private const int MinSeconds = -18 * SecondsPerHour;
-        private const int MaxSeconds = 18 * SecondsPerHour;
+        internal const int MinSeconds = -18 * SecondsPerHour;
+        internal const int MaxSeconds = 18 * SecondsPerHour;
         private const int MinMilliseconds = -18 * MillisecondsPerHour;
         private const int MaxMilliseconds = 18 * MillisecondsPerHour;
         private const long MinTicks = -18 * TicksPerHour;
@@ -310,7 +305,7 @@ namespace NodaTime
         /// </returns>
         int IComparable.CompareTo(object obj)
         {
-            if (obj == null)
+            if (obj is null)
             {
                 return 1;
             }
@@ -340,7 +335,7 @@ namespace NodaTime
         ///   <c>true</c> if the specified <see cref="System.Object" /> is equal to this instance;
         ///   otherwise, <c>false</c>.
         /// </returns>
-        public override bool Equals(object obj) => obj is Offset && Equals((Offset)obj);
+        public override bool Equals(object? obj) => obj is Offset other && Equals(other);
 
         /// <summary>
         ///   Returns a hash code for this instance.
@@ -375,7 +370,7 @@ namespace NodaTime
         /// or null to use the current thread's culture to obtain a format provider.
         /// </param>
         /// <filterpriority>2</filterpriority>
-        public string ToString(string patternText, IFormatProvider formatProvider) =>
+        public string ToString(string? patternText, IFormatProvider? formatProvider) =>
             OffsetPattern.BclSupport.Format(this, patternText, formatProvider);
         #endregion Formatting
 
@@ -498,58 +493,23 @@ namespace NodaTime
 
         #region XML serialization
         /// <inheritdoc />
-        XmlSchema IXmlSerializable.GetSchema() => null;
+        XmlSchema IXmlSerializable.GetSchema() => null!; // TODO(nullable): Return XmlSchema? when docfx works with that
 
         /// <inheritdoc />
-        void IXmlSerializable.ReadXml([NotNull] XmlReader reader)
+        void IXmlSerializable.ReadXml(XmlReader reader)
         {
             Preconditions.CheckNotNull(reader, nameof(reader));
-            var pattern = OffsetPattern.GeneralInvariantPattern;
+            var pattern = OffsetPattern.GeneralInvariant;
             string text = reader.ReadElementContentAsString();
-            this = pattern.Parse(text).Value;
+            Unsafe.AsRef(this) = pattern.Parse(text).Value;
         }
 
         /// <inheritdoc />
-        void IXmlSerializable.WriteXml([NotNull] XmlWriter writer)
+        void IXmlSerializable.WriteXml(XmlWriter writer)
         {
             Preconditions.CheckNotNull(writer, nameof(writer));
-            writer.WriteString(OffsetPattern.GeneralInvariantPattern.Format(this));
+            writer.WriteString(OffsetPattern.GeneralInvariant.Format(this));
         }
         #endregion
-
-#if !PCL
-        #region Binary serialization
-        // Note that serialization is done via milliseconds, for compatibility with Noda Time 1.x.
-
-        private const string MillisecondsSerializationName = "milliseconds";
-
-        /// <summary>
-        /// Private constructor only present for serialization.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to fetch data from.</param>
-        /// <param name="context">The source for this deserialization.</param>
-        private Offset([NotNull] SerializationInfo info, StreamingContext context)
-        {
-            Preconditions.CheckNotNull(info, nameof(info));
-            int millis = info.GetInt32(MillisecondsSerializationName);
-
-            Preconditions.CheckArgument(millis >= MinMilliseconds && millis <= MaxMilliseconds, nameof(info),
-                "Serialized offset value is outside the range of +/- 18 hours");
-            this.seconds = millis / MillisecondsPerSecond;
-        }
-
-        /// <summary>
-        /// Implementation of <see cref="ISerializable.GetObjectData"/>.
-        /// </summary>
-        /// <param name="info">The <see cref="SerializationInfo"/> to populate with data.</param>
-        /// <param name="context">The destination for this serialization.</param>
-        [System.Security.SecurityCritical]
-        void ISerializable.GetObjectData([NotNull] SerializationInfo info, StreamingContext context)
-        {
-            Preconditions.CheckNotNull(info, nameof(info));
-            info.AddValue(MillisecondsSerializationName, Milliseconds);
-        }
-        #endregion
-#endif
     }
 }

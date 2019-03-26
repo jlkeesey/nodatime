@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using NodaTime.Calendars;
 using NUnit.Framework;
 
 namespace NodaTime.Test
@@ -66,6 +65,18 @@ namespace NodaTime.Test
         public void ForOrdinal_Roundtrip(CalendarSystem calendar)
         {
             Assert.AreSame(calendar, CalendarSystem.ForOrdinal(calendar.Ordinal));
+        }
+
+        [Test, TestCaseSource(nameof(SupportedCalendars))]
+        public void ForOrdinalUncached_Roundtrip(CalendarSystem calendar)
+        {
+            Assert.AreSame(calendar, CalendarSystem.ForOrdinalUncached(calendar.Ordinal));
+        }
+
+        [Test]
+        public void ForOrdinalUncached_Invalid()
+        {
+            Assert.Throws<InvalidOperationException>(() => CalendarSystem.ForOrdinalUncached((CalendarOrdinal)9999));
         }
     }
 }

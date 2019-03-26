@@ -4,7 +4,7 @@
 
 using NodaTime.Utility;
 using System;
-using System.Globalization;
+using System.Diagnostics.CodeAnalysis;
 
 namespace NodaTime.Calendars
 {
@@ -63,6 +63,7 @@ namespace NodaTime.Calendars
             return startOfYearInDaysCache[year];
         }
 
+        [ExcludeFromCodeCoverage]
         protected sealed override int CalculateStartOfYearDays(int year)
         {
             // This would only be called from GetStartOfYearInDays, which is overridden.
@@ -93,18 +94,6 @@ namespace NodaTime.Calendars
                 int dayOfSecondHalf = dayOfYearZeroBased - 6 * 31;
                 month = dayOfSecondHalf / 30 + 7;
                 day = (dayOfSecondHalf % 30) + 1;
-            }
-            return new YearMonthDay(year, month, day);
-        }
-
-        internal sealed override YearMonthDay SetYear(YearMonthDay yearMonthDay, int year)
-        {
-            int month = yearMonthDay.Month;
-            int day = yearMonthDay.Day;
-            // The only value which might change day is the last day of a leap year
-            if (month == 12 && day == 30 && !IsLeapYear(year))
-            {
-                day = 29;
             }
             return new YearMonthDay(year, month, day);
         }

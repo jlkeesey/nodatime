@@ -28,14 +28,19 @@ namespace NodaTime.Test.Text
         internal CultureInfo Culture { get; set; } = CultureInfo.InvariantCulture;
 
         /// <summary>
+        /// Standard pattern, expected to format/parse the same way as Pattern.
+        /// </summary>
+        internal IPattern<T>? StandardPattern { get; set; }
+
+        /// <summary>
         /// Pattern text.
         /// </summary>
-        internal string Pattern { get; set; }
+        internal string? Pattern { get; set; }
 
         /// <summary>
         /// String value to be parsed, and expected result of formatting.
         /// </summary>
-        internal string Text { get; set; }
+        internal string? Text { get; set; }
 
         /// <summary>
         /// Template value to specify in the pattern
@@ -45,12 +50,12 @@ namespace NodaTime.Test.Text
         /// <summary>
         /// Extra description for the test case
         /// </summary>
-        internal string Description { get; set; }
+        internal string? Description { get; set; }
 
         /// <summary>
         /// Message format to verify for exceptions.
         /// </summary>
-        internal string Message { get; set; }
+        internal string? Message { get; set; }
 
         /// <summary>
         /// Message parameters to verify for exceptions.
@@ -69,9 +74,14 @@ namespace NodaTime.Test.Text
         {
             Assert.IsNull(Message);
             IPattern<T> pattern = CreatePattern();
-            var result = pattern.Parse(Text);
+            var result = pattern.Parse(Text!);
             var actualValue = result.Value;
             Assert.AreEqual(Value, actualValue);
+
+            if (StandardPattern != null)
+            {
+                Assert.AreEqual(Value, StandardPattern.Parse(Text!).Value);
+            }
         }
 
         internal void TestFormat()
@@ -79,6 +89,11 @@ namespace NodaTime.Test.Text
             Assert.IsNull(Message);
             IPattern<T> pattern = CreatePattern();
             Assert.AreEqual(Text, pattern.Format(Value));
+
+            if (StandardPattern != null)
+            {
+                Assert.AreEqual(Text, StandardPattern.Format(Value));
+            }
         }
 
         internal void TestParsePartial()
@@ -103,8 +118,8 @@ namespace NodaTime.Test.Text
 
         internal void TestAppendFormat()
         {
-            var pattern = CreatePartialPattern();
             Assert.IsNull(Message);
+            var pattern = CreatePattern();
             var builder = new StringBuilder("x");
             pattern.AppendFormat(Value, builder);
             Assert.AreEqual("x" + Text, builder.ToString());
@@ -112,7 +127,7 @@ namespace NodaTime.Test.Text
 
         internal void TestInvalidPattern()
         {
-            string expectedMessage = FormatMessage(Message, Parameters.ToArray());
+            string expectedMessage = FormatMessage(Message!, Parameters.ToArray());
             try
             {
                 CreatePattern();
@@ -127,9 +142,9 @@ namespace NodaTime.Test.Text
 
         public void TestParseFailure()
         {
-            string expectedMessage = FormatMessage(Message, Parameters.ToArray());
+            string expectedMessage = FormatMessage(Message!, Parameters.ToArray());
             IPattern<T> pattern = CreatePattern();
-            var result = pattern.Parse(Text);
+            var result = pattern.Parse(Text!);
             Assert.IsFalse(result.Success);
             try
             {
@@ -161,7 +176,7 @@ namespace NodaTime.Test.Text
                 {
                     builder.AppendFormat("Description={0}; ", Description);
                 }
-                if (!Template.Equals(DefaultTemplate))
+                if (!Template!.Equals(DefaultTemplate))
                 {
                     builder.AppendFormat("Template={0};", Template);
                 }
@@ -185,7 +200,7 @@ namespace NodaTime.Test.Text
             }
             catch (FormatException)
             {
-                throw new FormatException(string.Format("Failed to format string '{0}' with {1} parameters", message, parameters.Length));
+                throw new FormatException($"Failed to format string '{message}' with {parameters.Length} parameters");
             }
         }
     }

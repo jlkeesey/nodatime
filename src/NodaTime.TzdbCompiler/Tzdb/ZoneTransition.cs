@@ -2,10 +2,9 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System;
-using System.Text;
-using NodaTime.Utility;
 using NodaTime.TimeZones;
+using NodaTime.Utility;
+using System;
 
 namespace NodaTime.TzdbCompiler.Tzdb
 {
@@ -33,7 +32,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <param name="savings">The actual offset at this transition.</param>
         internal ZoneTransition(Instant instant, String name, Offset standardOffset, Offset savings)
         {
-            Preconditions.CheckNotNull(name, "name");
+            Preconditions.CheckNotNull(name, nameof(name));
             this.Instant = instant;
             this.Name = name;
             this.StandardOffset = standardOffset;
@@ -84,10 +83,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// </returns>
         internal bool IsTransitionFrom(ZoneTransition other)
         {
-            if (other == null)
-            {
-                return true;
-            }
+            Preconditions.CheckNotNull(other, nameof(other));
             bool later = Instant > other.Instant;
             bool different = Name != other.Name || StandardOffset != other.StandardOffset || Savings != other.Savings;
             return later && different;

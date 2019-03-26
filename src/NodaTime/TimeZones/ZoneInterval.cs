@@ -15,7 +15,7 @@ namespace NodaTime.TimeZones
     /// </summary>
     /// <threadsafety>This type is an immutable reference type. See the thread safety section of the user guide for more information.</threadsafety>
     [Immutable]
-    public sealed class ZoneInterval : IEquatable<ZoneInterval>
+    public sealed class ZoneInterval : IEquatable<ZoneInterval?>
     {
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace NodaTime.TimeZones
         /// contributions.
         /// </summary>
         /// <remarks>
-        /// This is effectively <c>Offset - Savings</c>.
+        /// This is effectively <c>WallOffset - Savings</c>.
         /// </remarks>
         /// <value>The base Offset.</value>
         public Offset StandardOffset
@@ -91,7 +91,7 @@ namespace NodaTime.TimeZones
         /// extends to the end of time.</value>
         public bool HasEnd => RawEnd.IsValid;
 
-        // TODO(2.0): Consider whether we need some way of checking whether IsoLocalStart/End will throw.
+        // TODO(feature): Consider whether we need some way of checking whether IsoLocalStart/End will throw.
         // Clients can check HasStart/HasEnd for infinity, but what about unrepresentable local values?
 
         /// <summary>
@@ -159,9 +159,6 @@ namespace NodaTime.TimeZones
             }
         }
 
-        // TODO(2.0): Consider changing the fourth parameter of the constructors to accept standard time rather than the wall offset. It's very
-        // inconsistent with everything else...
-
         /// <summary>
         /// Initializes a new instance of the <see cref="ZoneInterval" /> class.
         /// </summary>
@@ -173,7 +170,7 @@ namespace NodaTime.TimeZones
         /// <param name="wallOffset">The <see cref="WallOffset" /> from UTC for this period including any daylight savings.</param>
         /// <param name="savings">The <see cref="WallOffset" /> daylight savings contribution to the offset.</param>
         /// <exception cref="ArgumentException">If <c><paramref name = "start" /> &gt;= <paramref name = "end" /></c>.</exception>
-        public ZoneInterval([NotNull] string name, Instant? start, Instant? end, Offset wallOffset, Offset savings)
+        public ZoneInterval(string name, Instant? start, Instant? end, Offset wallOffset, Offset savings)
             : this(name, start ?? Instant.BeforeMinValue, end ?? Instant.AfterMaxValue, wallOffset, savings)
         {
         }
@@ -189,7 +186,7 @@ namespace NodaTime.TimeZones
         /// <param name="wallOffset">The <see cref="WallOffset" /> from UTC for this period including any daylight savings.</param>
         /// <param name="savings">The <see cref="WallOffset" /> daylight savings contribution to the offset.</param>
         /// <exception cref="ArgumentException">If <c><paramref name = "start" /> &gt;= <paramref name = "end" /></c>.</exception>
-        internal ZoneInterval([NotNull] string name, Instant start, Instant end, Offset wallOffset, Offset savings)
+        internal ZoneInterval(string name, Instant start, Instant end, Offset wallOffset, Offset savings)
         {
             Preconditions.CheckNotNull(name, nameof(name));
             Preconditions.CheckArgument(start < end, nameof(start), "The start Instant must be less than the end Instant");
@@ -247,7 +244,7 @@ namespace NodaTime.TimeZones
         /// <summary>
         /// Returns whether this zone interval has the same offsets and name as another.
         /// </summary>
-        internal bool EqualIgnoreBounds([NotNull] [Trusted] ZoneInterval other)
+        internal bool EqualIgnoreBounds([Trusted] ZoneInterval other)
         {
             Preconditions.DebugCheckNotNull(other, nameof(other));
             return other.WallOffset == WallOffset && other.Savings == Savings && other.Name == Name;
@@ -265,9 +262,9 @@ namespace NodaTime.TimeZones
         /// <param name="other">An object to compare with this object.
         /// </param>
         [DebuggerStepThrough]
-        public bool Equals(ZoneInterval other)
+        public bool Equals(ZoneInterval? other)
         {
-            if (ReferenceEquals(null, other))
+            if (other is null)
             {
                 return false;
             }
@@ -290,7 +287,7 @@ namespace NodaTime.TimeZones
         /// <param name="obj">The <see cref="T:System.Object" /> to compare with the current <see cref="T:System.Object" />.</param>
         /// <filterpriority>2</filterpriority>
         [DebuggerStepThrough]
-        public override bool Equals(object obj) => Equals(obj as ZoneInterval);
+        public override bool Equals(object? obj) => Equals(obj as ZoneInterval);
 
         /// <summary>
         ///   Serves as a hash function for a particular type.
@@ -306,7 +303,7 @@ namespace NodaTime.TimeZones
                 .Hash(RawEnd)
                 .Hash(WallOffset)
                 .Hash(Savings)
-                .Value;    
+                .Value;
 
         /// <summary>
         ///   Returns a <see cref="System.String" /> that represents this instance.

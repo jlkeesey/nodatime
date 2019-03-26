@@ -2,6 +2,7 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
+using JetBrains.Annotations;
 using NodaTime.Extensions;
 using System;
 using System.Globalization;
@@ -96,23 +97,18 @@ namespace NodaTime.Calendars
         /// </remarks>
         /// <param name="calendarWeekRule">The BCL rule to emulate.</param>
         /// <param name="firstDayOfWeek">The first day of the week to use in the rule.</param>
+        /// <returns>A rule which behaves the same way as the BCL
+        /// <see cref="Calendar.GetWeekOfYear(DateTime, CalendarWeekRule, DayOfWeek)"/>
+        /// method.</returns>
         public static IWeekYearRule FromCalendarWeekRule(CalendarWeekRule calendarWeekRule, DayOfWeek firstDayOfWeek)
-        {
-            int minDaysInFirstWeek;
-            switch (calendarWeekRule)
+        {            
+            int minDaysInFirstWeek = calendarWeekRule switch
             {
-                case FirstDay:
-                    minDaysInFirstWeek = 1;
-                    break;
-                case FirstFourDayWeek:
-                    minDaysInFirstWeek = 4;
-                    break;
-                case FirstFullWeek:
-                    minDaysInFirstWeek = 7;
-                    break;
-                default:
-                    throw new ArgumentException($"Unsupported CalendarWeekRule: {calendarWeekRule}", nameof(calendarWeekRule));
-            }
+                FirstDay => 1,
+                FirstFourDayWeek => 4,
+                FirstFullWeek => 7,
+                _ => throw new ArgumentException($"Unsupported CalendarWeekRule: {calendarWeekRule}", nameof(calendarWeekRule))
+            };
             return new SimpleWeekYearRule(minDaysInFirstWeek, firstDayOfWeek.ToIsoDayOfWeek(), true);
         }
     }

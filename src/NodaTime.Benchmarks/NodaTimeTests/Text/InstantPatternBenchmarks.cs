@@ -2,7 +2,6 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-using System.ComponentModel;
 using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using NodaTime.Text;
@@ -17,7 +16,7 @@ namespace NodaTime.Benchmarks.NodaTimeTests.Text
         private static readonly InstantPattern GeneralPattern = InstantPattern.CreateWithInvariantCulture("g");
         private static readonly InstantPattern PatternWithNonTruncatedTicks = InstantPattern.CreateWithInvariantCulture("yyyy'-'MM'-'dd'T'HH':'mm':'ss;fffffff'Z'");
         private static readonly string SampleStringGeneral = GeneralPattern.Format(Sample);
-        private static readonly string SampleStringExtendedIso = InstantPattern.ExtendedIsoPattern.Format(Sample);
+        private static readonly string SampleStringExtendedIso = InstantPattern.ExtendedIso.Format(Sample);
         private static readonly CultureInfo MutableInvariantCulture = (CultureInfo) CultureInfo.InvariantCulture.Clone();
 
         [Benchmark]
@@ -29,13 +28,13 @@ namespace NodaTime.Benchmarks.NodaTimeTests.Text
         [Benchmark]
         public void ExtendedIsoPatternFormat()
         {
-            InstantPattern.ExtendedIsoPattern.Format(Sample);
+            InstantPattern.ExtendedIso.Format(Sample);
         }
 
         [Benchmark]
         public void ExtendedIsoPatternFormatWithTicks()
         {
-            InstantPattern.ExtendedIsoPattern.Format(SampleWithTicks);
+            InstantPattern.ExtendedIso.Format(SampleWithTicks);
         }
 
         [Benchmark]
@@ -53,14 +52,14 @@ namespace NodaTime.Benchmarks.NodaTimeTests.Text
         [Benchmark]
         public void ExtendedIsoPatternParse()
         {
-            InstantPattern.ExtendedIsoPattern.Parse(SampleStringExtendedIso);
+            InstantPattern.ExtendedIso.Parse(SampleStringExtendedIso);
         }
 
         [Benchmark]
         public void ParsePatternExtendedIso()
         {
             // Use a mutable culture info to prevent caching
-            InstantPattern.Create(InstantPattern.ExtendedIsoPattern.PatternText, MutableInvariantCulture);
+            InstantPattern.Create(InstantPattern.ExtendedIso.PatternText, MutableInvariantCulture);
         }
     }
 }

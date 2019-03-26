@@ -39,12 +39,12 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <summary>
         /// A list of the zone locations known to this database from zone.tab.
         /// </summary>
-        internal IList<TzdbZoneLocation> ZoneLocations { get; set; }
+        internal IList<TzdbZoneLocation>? ZoneLocations { get; set; }
 
         /// <summary>
         /// A list of the zone locations known to this database from zone1970.tab.
         /// </summary>
-        internal IList<TzdbZone1970Location> Zone1970Locations { get; set; }
+        internal IList<TzdbZone1970Location>? Zone1970Locations { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TzdbDatabase" /> class.
@@ -64,8 +64,11 @@ namespace NodaTime.TzdbCompiler.Tzdb
         public TzdbDateTimeZoneSource ToTzdbDateTimeZoneSource()
         {
             var ms = new MemoryStream();
-            var writer = new TzdbStreamWriter(ms);
-            writer.Write(this, new WindowsZones("n/a", Version, "n/a", new MapZone[0]));
+            var writer = new TzdbStreamWriter();
+            writer.Write(this,
+                new WindowsZones("n/a", Version, "n/a", new MapZone[0]), // No Windows mappings,
+                new Dictionary<string, string>(), // No additional name-to-id mappings
+                ms);
             ms.Position = 0;
             return TzdbDateTimeZoneSource.FromStream(ms);
         }
@@ -87,8 +90,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <param name="rule">The rule to add.</param>
         internal void AddRule(RuleLine rule)
         {
-            IList<RuleLine> ruleSet;
-            if (!Rules.TryGetValue(rule.Name, out ruleSet))
+            if (!Rules.TryGetValue(rule.Name, out IList<RuleLine> ruleSet))
             {
                 ruleSet = new List<RuleLine>();
                 Rules[rule.Name] = ruleSet;
@@ -103,8 +105,7 @@ namespace NodaTime.TzdbCompiler.Tzdb
         /// <param name="zone">The zone to add.</param>
         internal void AddZone(ZoneLine zone)
         {
-            IList<ZoneLine> zoneSet;
-            if (!Zones.TryGetValue(zone.Name, out zoneSet))
+            if (!Zones.TryGetValue(zone.Name, out IList<ZoneLine> zoneSet))
             {
                 zoneSet = new List<ZoneLine>();
                 Zones[zone.Name] = zoneSet;
@@ -155,11 +156,11 @@ namespace NodaTime.TzdbCompiler.Tzdb
         internal void LogCounts()
         {
             Console.WriteLine("=======================================");
-            Console.WriteLine("Rule sets:    {0:D}", Rules.Count);
-            Console.WriteLine("Zones:        {0:D}", Zones.Count);
-            Console.WriteLine("Aliases:      {0:D}", Aliases.Count);
-            Console.WriteLine("Zone locations: {0:D}", ZoneLocations?.Count ?? 0);
-            Console.WriteLine("Zone1970 locations: {0:D}", Zone1970Locations?.Count ?? 0);
+            Console.WriteLine($"Rule sets:    {Rules.Count:D}", Rules.Count);
+            Console.WriteLine($"Zones:        {Zones.Count:D}", Zones.Count);
+            Console.WriteLine($"Aliases:      {Aliases.Count:D}", Aliases.Count);
+            Console.WriteLine($"Zone locations: {ZoneLocations?.Count ?? 0:D}");
+            Console.WriteLine($"Zone1970 locations: {Zone1970Locations?.Count ?? 0:D}");
             Console.WriteLine("=======================================");
         }
     }

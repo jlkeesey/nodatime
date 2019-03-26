@@ -17,15 +17,13 @@ namespace NodaTime.Test.Annotations
         {
             var unannotatedClasses = typeof(Instant).GetTypeInfo().Assembly
                                                     .DefinedTypes
-                                                    .Concat(new[] { typeof(ZonedDateTime.Comparer).GetTypeInfo() })
-                                                    .Where(t => t.IsClass && t.IsPublic && t.BaseType != typeof(MulticastDelegate))
+                                                    .Where(t => t.IsClass && (t.IsNestedPublic || t.IsPublic) && t.BaseType != typeof(MulticastDelegate))
                                                     .Where(t => !(t.IsAbstract && t.IsSealed)) // Ignore static classes
                                                     .OrderBy(t => t.Name)
                                                     .Where(t => !t.IsDefined(typeof(ImmutableAttribute)) &&
-                                                                !t.IsDefined(typeof(MutableAttribute)))
-                                                    .ToList();
-            Assert.IsEmpty(unannotatedClasses, "Unannotated classes: " + string.Join(", ", unannotatedClasses.Select(c => c.Name)));
-        }
+                                                                !t.IsDefined(typeof(MutableAttribute)));
 
+            TestHelper.AssertNoFailures(unannotatedClasses, c => c.Name);
+        }
     }
 }

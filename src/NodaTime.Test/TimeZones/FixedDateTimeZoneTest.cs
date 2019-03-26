@@ -50,7 +50,7 @@ namespace NodaTime.Test.TimeZones
         public void For_Id_FixedOffset()
         {
             string id = "UTC+05:30";
-            DateTimeZone zone = FixedDateTimeZone.GetFixedZoneOrNull(id);
+            DateTimeZone zone = FixedDateTimeZone.GetFixedZoneOrNull(id)!;
             Assert.AreEqual(DateTimeZone.ForOffset(Offset.FromHoursAndMinutes(5, 30)), zone);
             Assert.AreEqual(id, zone.Id);
         }
@@ -59,7 +59,7 @@ namespace NodaTime.Test.TimeZones
         public void For_Id_FixedOffset_NonCanonicalId()
         {
             string id = "UTC+05:00:00";
-            DateTimeZone zone = FixedDateTimeZone.GetFixedZoneOrNull(id);
+            DateTimeZone zone = FixedDateTimeZone.GetFixedZoneOrNull(id)!;
             Assert.AreEqual(zone, DateTimeZone.ForOffset(Offset.FromHours(5)));
             Assert.AreEqual("UTC+05", zone.Id);
         }
@@ -132,11 +132,11 @@ namespace NodaTime.Test.TimeZones
         [Test]
         public void Equals()
         {
-            TestHelper.TestEqualsClass<DateTimeZone>(new FixedDateTimeZone(Offset.FromSeconds(300)),
+            TestHelper.TestEqualsClass(new FixedDateTimeZone(Offset.FromSeconds(300)),
                 new FixedDateTimeZone(Offset.FromSeconds(300)),
                 new FixedDateTimeZone(Offset.FromSeconds(500)));
 
-            TestHelper.TestEqualsClass<DateTimeZone>(new FixedDateTimeZone("Foo", Offset.FromSeconds(300)),
+            TestHelper.TestEqualsClass(new FixedDateTimeZone("Foo", Offset.FromSeconds(300)),
                 new FixedDateTimeZone("Foo", Offset.FromSeconds(300)),
                 new FixedDateTimeZone("Bar", Offset.FromSeconds(300)));
         }

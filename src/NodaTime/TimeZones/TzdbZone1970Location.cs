@@ -19,7 +19,6 @@ namespace NodaTime.TimeZones
     /// <see cref="TzdbZoneLocation"/>, except that multiple countries may be represented.
     /// </summary>
     /// <threadsafety>This type is immutable reference type. See the thread safety section of the user guide for more information.</threadsafety>
-    // TODO: Once we've decided whether this approach (two separate classes) is appropriate, work out a better name.
     [Immutable]
     public sealed class TzdbZone1970Location
     {
@@ -49,7 +48,7 @@ namespace NodaTime.TimeZones
         /// is the most populous country in the list. No entry in this list is ever null.
         /// </remarks>
         /// <value>The list of countries associated with this location</value>
-        [NotNull] public IList<Country> Countries { get; }
+        public IList<Country> Countries { get; }
 
         /// <summary>
         /// The ID of the time zone for this location.
@@ -57,7 +56,7 @@ namespace NodaTime.TimeZones
         /// <remarks>If this mapping was fetched from a <see cref="TzdbDateTimeZoneSource"/>, it will always be a valid ID within that source.
         /// </remarks>
         /// <value>The ID of the time zone for this location.</value>
-        [NotNull] public string ZoneId { get; }
+        public string ZoneId { get; }
 
         /// <summary>
         /// Gets the comment (in English) for the mapping, if any.
@@ -67,7 +66,7 @@ namespace NodaTime.TimeZones
         /// This will return an empty string if no comment was provided in the original data.
         /// </remarks>
         /// <value>The comment (in English) for the mapping, if any.</value>
-        [NotNull] public string Comment { get; }
+        public string Comment { get; }
 
         /// <summary>
         /// Creates a new location.
@@ -83,8 +82,8 @@ namespace NodaTime.TimeZones
         /// <param name="comment">Optional comment. Must not be null, but may be empty.</param>
         /// <exception cref="ArgumentOutOfRangeException">The latitude or longitude is invalid.</exception>
         public TzdbZone1970Location(int latitudeSeconds, int longitudeSeconds,
-            [NotNull] IEnumerable<Country> countries,
-            [NotNull] string zoneId, [NotNull] string comment)
+            IEnumerable<Country> countries,
+            string zoneId, string comment)
         {
             Preconditions.CheckArgumentRange(nameof(latitudeSeconds), latitudeSeconds, -90 * 3600, 90 * 3600);
             Preconditions.CheckArgumentRange(nameof(longitudeSeconds), longitudeSeconds, -180 * 3600, 180 * 3600);
@@ -107,8 +106,9 @@ namespace NodaTime.TimeZones
             writer.WriteSignedCount(latitudeSeconds);
             writer.WriteSignedCount(longitudeSeconds);
             writer.WriteCount(Countries.Count);
-            // TODO (2.0): Consider writing out the ISO-3166 file as a separate field,
-            // so we can reuse objects. We don't actually waste very much this way, mind you, due to the string pool...
+            // We considered writing out the ISO-3166 file as a separate field,
+            // so we can reuse objects, but we don't actually waste very much space this way, 
+            // due to the string pool... and the increased code complexity isn't worth it.
             foreach (var country in Countries)
             {
                 writer.WriteString(country.Name);
@@ -148,7 +148,8 @@ namespace NodaTime.TimeZones
         /// A country represented within an entry in the "zone1970.tab" file, with the English name
         /// mapped from the "iso3166.tab" file.
         /// </summary>
-        public sealed class Country : IEquatable<Country>
+        [Immutable]
+        public sealed class Country : IEquatable<Country?>
         {
             /// <summary>
             /// Gets the English name of the country.
@@ -167,7 +168,7 @@ namespace NodaTime.TimeZones
             /// </summary>
             /// <param name="name">Country name; must not be empty.</param>
             /// <param name="code">2-letter code</param>
-            public Country([NotNull] string name, [NotNull] string code)
+            public Country(string name, string code)
             {
                 Name = Preconditions.CheckNotNull(name, nameof(name));
                 Code = Preconditions.CheckNotNull(code, nameof(code));
@@ -180,14 +181,14 @@ namespace NodaTime.TimeZones
             /// </summary>
             /// <param name="other">The country to compare with this one.</param>
             /// <returns><c>true</c> if the given country has the same name and code as this one; <c>false</c> otherwise.</returns>
-            public bool Equals(Country other) => other != null && other.Code == Code && other.Name == Name;
+            public bool Equals(Country? other) => other != null && other.Code == Code && other.Name == Name;
 
             /// <summary>
             /// Compares countries for equality, by name and code.
             /// </summary>
             /// <param name="obj">The object to compare this one with.</param>
             /// <returns><c>true</c> if the given object is a country with the same name and code as this one; <c>false</c> otherwise.</returns>
-            public override bool Equals(object obj) => Equals(obj as Country);
+            public override bool Equals(object? obj) => Equals(obj as Country);
 
             /// <summary>
             /// Returns a hash code for this country.

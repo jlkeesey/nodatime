@@ -3,7 +3,6 @@
 // as found in the LICENSE.txt file.
 
 using CommandLine;
-using NodaTime.Extensions;
 using NodaTime.TimeZones;
 using NodaTime.TimeZones.Cldr;
 using NodaTime.TzdbCompiler.Tzdb;
@@ -37,7 +36,7 @@ namespace NodaTime.TzdbCompiler
             }
 
             var tzdbCompiler = new TzdbZoneInfoCompiler();
-            var tzdb = tzdbCompiler.Compile(options.SourceDirectoryName);
+            var tzdb = tzdbCompiler.Compile(options.SourceDirectoryName!);
             tzdb.LogCounts();
             if (options.ZoneId != null)
             {
@@ -51,8 +50,11 @@ namespace NodaTime.TzdbCompiler
                 windowsZones = MergeWindowsZones(windowsZones, overrideFile);
             }
             LogWindowsZonesSummary(windowsZones);
-            var writer = CreateWriter(options);
-            writer.Write(tzdb, windowsZones);
+            var writer = new TzdbStreamWriter();
+            using (var stream = CreateOutputStream(options))
+            {
+                writer.Write(tzdb, windowsZones, NameIdMappingSupport.StandardNameToIdMap, stream);
+            }
 
             if (options.OutputFileName != null)
             {
@@ -72,7 +74,7 @@ namespace NodaTime.TzdbCompiler
         /// </summary>
         private static WindowsZones LoadWindowsZones(CompilerOptions options, string targetTzdbVersion)
         {
-            var mappingPath = options.WindowsMapping;
+            var mappingPath = options.WindowsMapping!;
             if (File.Exists(mappingPath))
             {
                 return CldrWindowsZonesParser.Parse(mappingPath);
@@ -97,7 +99,7 @@ namespace NodaTime.TzdbCompiler
                 .Where(zones => StringComparer.Ordinal.Compare(zones.TzdbVersion, targetTzdbVersion) <= 0)
                 .FirstOrDefault();
 
-            if (bestFile == null)
+            if (bestFile is null)
             {
                 throw new Exception($"No zones files suitable for version {targetTzdbVersion}. Found versions targeting: [{versions}]");
             }
@@ -108,23 +110,23 @@ namespace NodaTime.TzdbCompiler
         private static void LogWindowsZonesSummary(WindowsZones windowsZones)
         {
             Console.WriteLine("Windows Zones:");
-            Console.WriteLine("  Version: {0}", windowsZones.Version);
-            Console.WriteLine("  TZDB version: {0}", windowsZones.TzdbVersion);
-            Console.WriteLine("  Windows version: {0}", windowsZones.WindowsVersion);
-            Console.WriteLine("  {0} MapZones", windowsZones.MapZones.Count);
-            Console.WriteLine("  {0} primary mappings", windowsZones.PrimaryMapping.Count);
+            Console.WriteLine($"  Version: {windowsZones.Version}");
+            Console.WriteLine($"  TZDB version: {windowsZones.TzdbVersion}");
+            Console.WriteLine($"  Windows version: {windowsZones.WindowsVersion}");
+            Console.WriteLine($"  {windowsZones.MapZones.Count} MapZones");
+            Console.WriteLine($"  {windowsZones.PrimaryMapping.Count} primary mappings");
         }
 
-        private static TzdbStreamWriter CreateWriter(CompilerOptions options)
+        private static Stream CreateOutputStream(CompilerOptions options)
         {
             // If we don't have an actual file, just write to an empty stream.
             // That way, while debugging, we still get to see all the data written etc.
-            if (options.OutputFileName == null)
+            if (options.OutputFileName is null)
             {
-                return new TzdbStreamWriter(new MemoryStream());
+                return new MemoryStream();
             }
             string file = Path.ChangeExtension(options.OutputFileName, "nzd");
-            return new TzdbStreamWriter(File.Create(file));
+            return File.Create(file);
         }
 
         private static TzdbDateTimeZoneSource Read(CompilerOptions options)

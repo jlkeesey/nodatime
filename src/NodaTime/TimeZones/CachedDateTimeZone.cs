@@ -54,14 +54,14 @@ namespace NodaTime.TimeZones
         /// </remarks>
         /// <param name="timeZone">The time zone to cache.</param>
         /// <returns>The cached time zone.</returns>
-        internal static DateTimeZone ForZone([NotNull] DateTimeZone timeZone)
+        internal static DateTimeZone ForZone(DateTimeZone timeZone)
         {
             Preconditions.CheckNotNull(timeZone, nameof(timeZone));
             if (timeZone is CachedDateTimeZone || timeZone.IsFixed)
             {
                 return timeZone;
             }
-            return new CachedDateTimeZone(timeZone, CachingZoneIntervalMap.CacheMap(timeZone, CachingZoneIntervalMap.CacheType.Hashtable));
+            return new CachedDateTimeZone(timeZone, CachingZoneIntervalMap.CacheMap(timeZone));
         }
 
         /// <summary>
@@ -71,17 +71,5 @@ namespace NodaTime.TimeZones
         {
             return map.GetZoneInterval(instant);
         }
-
-        #region I/O
-        protected override bool EqualsImpl(DateTimeZone zone)
-        {
-            return TimeZone.Equals(((CachedDateTimeZone) zone).TimeZone);
-        }
-
-        public override int GetHashCode()
-        {
-            return TimeZone.GetHashCode();
-        }
-        #endregion
     }
 }

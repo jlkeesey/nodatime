@@ -100,7 +100,7 @@ namespace NodaTime
         /// allows object initializers to be used.
         /// </summary>
         /// <param name="period">An existing period to copy values from.</param>
-        public PeriodBuilder([NotNull] Period period)
+        public PeriodBuilder(Period period)
         {
             Preconditions.CheckNotNull(period, nameof(period));
             Years = period.Years;
@@ -134,23 +134,20 @@ namespace NodaTime
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="unit"/> is not a single unit, or a value is provided for a date unit which is outside the range of <see cref="System.Int32"/>.</exception>
         public long this[PeriodUnits unit]
         {
-            get
-            {
-                switch (unit)
+            get => unit switch
                 {
-                    case PeriodUnits.Years: return Years;
-                    case PeriodUnits.Months: return Months;
-                    case PeriodUnits.Weeks: return Weeks;
-                    case PeriodUnits.Days: return Days;
-                    case PeriodUnits.Hours: return Hours;
-                    case PeriodUnits.Minutes: return Minutes;
-                    case PeriodUnits.Seconds: return Seconds;
-                    case PeriodUnits.Milliseconds: return Milliseconds;
-                    case PeriodUnits.Ticks: return Ticks;
-                    case PeriodUnits.Nanoseconds: return Nanoseconds;
-                    default: throw new ArgumentOutOfRangeException(nameof(unit), "Indexer for PeriodBuilder only takes a single unit");
-                }
-            }
+                    PeriodUnits.Years => Years,
+                    PeriodUnits.Months => Months,
+                    PeriodUnits.Weeks => Weeks,
+                    PeriodUnits.Days => Days,
+                    PeriodUnits.Hours => Hours,
+                    PeriodUnits.Minutes => Minutes,
+                    PeriodUnits.Seconds => Seconds,
+                    PeriodUnits.Milliseconds => Milliseconds,
+                    PeriodUnits.Ticks => Ticks,
+                    PeriodUnits.Nanoseconds => Nanoseconds,
+                    _ => throw new ArgumentOutOfRangeException(nameof(unit), "Indexer for PeriodBuilder only takes a single unit")
+                };
             set
             {
                 if ((unit & PeriodUnits.AllDateUnits) != 0)
@@ -182,13 +179,13 @@ namespace NodaTime
             new Period(Years, Months, Weeks, Days, Hours, Minutes, Seconds, Milliseconds, Ticks, Nanoseconds);
 
         /// <inheritdoc />
-        XmlSchema IXmlSerializable.GetSchema() => null;
+        XmlSchema IXmlSerializable.GetSchema() => null!; // TODO(nullable): Return XmlSchema? when docfx works with that
 
         /// <inheritdoc />
         void IXmlSerializable.ReadXml(XmlReader reader)
         {
             string text = reader.ReadElementContentAsString();
-            Period period = PeriodPattern.RoundtripPattern.Parse(text).Value;
+            Period period = PeriodPattern.Roundtrip.Parse(text).Value;
             Years = period.Years;
             Months = period.Months;
             Weeks = period.Weeks;
@@ -204,7 +201,7 @@ namespace NodaTime
         /// <inheritdoc />
         void IXmlSerializable.WriteXml(XmlWriter writer)
         {
-            writer.WriteString(PeriodPattern.RoundtripPattern.Format(Build()));
+            writer.WriteString(PeriodPattern.Roundtrip.Format(Build()));
         }
     }
 }

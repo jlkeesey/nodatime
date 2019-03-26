@@ -21,14 +21,19 @@ namespace NodaTime.TimeZones.IO
         /// account of bufferedByte as well.
         /// </summary>
         private readonly Stream input;
-        private readonly IList<string> stringPool;
+
+        /// <summary>
+        /// String pool to use, or null if no string pool is in use.
+        /// </summary>
+        private readonly IList<string>? stringPool;
+
         /// <summary>
         /// Sometimes we need to buffer a byte in memory, e.g. to check if there is any
         /// more data. Anything reading directly from the stream should check here first.
         /// </summary>
         private byte? bufferedByte; 
 
-        internal DateTimeZoneReader(Stream input, IList<string> stringPool)
+        internal DateTimeZoneReader(Stream input, IList<string>? stringPool)
         {
             this.input = input;
             this.stringPool = stringPool;
@@ -204,21 +209,17 @@ namespace NodaTime.TimeZones.IO
                 int value = ReadCount();
                 if (value < DateTimeZoneWriter.ZoneIntervalConstants.MinValueForHoursSincePrevious)
                 {
-                    switch (value)
+                    return value switch
                     {
-                        case DateTimeZoneWriter.ZoneIntervalConstants.MarkerMinValue:
-                            return Instant.BeforeMinValue;
-                        case DateTimeZoneWriter.ZoneIntervalConstants.MarkerMaxValue:
-                            return Instant.AfterMaxValue;
-                        case DateTimeZoneWriter.ZoneIntervalConstants.MarkerRaw:
-                            return Instant.FromUnixTimeTicks(ReadInt64());
-                        default: 
-                            throw new InvalidNodaDataException("Unrecognised marker value: " + value);
-                    }
+                        DateTimeZoneWriter.ZoneIntervalConstants.MarkerMinValue => Instant.BeforeMinValue,
+                        DateTimeZoneWriter.ZoneIntervalConstants.MarkerMaxValue => Instant.AfterMaxValue,
+                        DateTimeZoneWriter.ZoneIntervalConstants.MarkerRaw => Instant.FromUnixTimeTicks(ReadInt64()),
+                        _ => throw new InvalidNodaDataException("Unrecognised marker value: " + value)
+                    };
                 }
                 if (value < DateTimeZoneWriter.ZoneIntervalConstants.MinValueForMinutesSinceEpoch)
                 {
-                    if (previous == null)
+                    if (previous is null)
                     {
                         throw new InvalidNodaDataException(
                             "No previous value, so can't interpret value encoded as delta-since-previous: " + value);
@@ -238,7 +239,7 @@ namespace NodaTime.TimeZones.IO
         /// <returns>The string value from the stream.</returns>
         public string ReadString()
         {
-            if (stringPool == null)
+            if (stringPool is null)
             {
                 // This will flush the buffered byte if there is one, so we don't need to worry about that
                 // when reading the actual data.
